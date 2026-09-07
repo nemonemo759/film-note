@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FILM NOTE - 관람 기록</title>
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  
+  <style>
+    * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; }
+    body { background-color: #f7f4ed; color: #333; margin: 0; padding: 30px 20px; }
+    .container { max-width: 680px; margin: 0 auto; }
+    
+    .header-card {
+      background-color: #f2ebd9; border-radius: 18px; padding: 24px 28px;
+      margin-bottom: 24px; position: relative;
+    }
+    .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .sub-title { font-size: 0.85rem; font-weight: 700; color: #b58d53; letter-spacing: 0.5px; }
+    
+    .auth-box { display: flex; align-items: center; gap: 10px; }
+    .user-profile { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: none; border: 1px solid #dcd3be; }
+    .btn-auth {
+      padding: 6px 14px; border-radius: 20px; border: 1px solid #dcd3be;
+      background: #fff; font-weight: 600; font-size: 0.8rem; color: #444; cursor: pointer;
+      display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+    }
+    .btn-auth:hover { background: #f8f8f8; }
+
+    .month-title { font-size: 2rem; font-weight: 800; color: #2b2b2b; margin: 0 0 12px 0; }
+    .nav-btns { display: flex; gap: 6px; margin-bottom: 8px; }
+    .btn-circle {
+      width: 32px; height: 32px; border-radius: 10px; border: 1px solid #dcd3be;
+      background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; color: #666; transition: all 0.2s;
+    }
+    .btn-circle:hover { background: #f8f8f8; }
+    .today-btn {
+      position: absolute; right: 28px; bottom: 24px;
+      padding: 8px 18px; border-radius: 20px; border: 1px solid #dcd3be;
+      background: #fff; font-weight: 600; font-size: 0.85rem; color: #444; cursor: pointer;
+    }
+    .summary-text { font-size: 0.85rem; color: #8e8370; margin-top: 4px; }
+
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+    .day-name { text-align: center; font-weight: 600; padding: 6px 0; color: #a39580; font-size: 0.85rem; }
+    
+    .day-cell {
+      height: 110px; background: #ffffff; border-radius: 14px; padding: 8px;
+      position: relative; cursor: pointer; border: 1px solid #eee8dc;
+      transition: transform 0.1s, border-color 0.2s;
+      overflow: hidden; background-size: cover; background-position: center;
+    }
+    .day-cell:hover { border-color: #cbb898; transform: translateY(-2px); }
+    .day-cell.today { border: 2px solid #b58d53; }
+    
+    .day-cell.has-record-no-poster {
+      background-color: #e8e2d5;
+      border-color: #dcd3be;
+    }
+
+    .day-number {
+      font-size: 0.85rem; color: #333; font-weight: 700;
+      display: inline-block; padding: 2px 6px; border-radius: 6px;
+      background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(2px);
+      position: relative; z-index: 2;
+    }
+    .empty-cell { height: 110px; background: transparent; }
+    
+    .count-badge {
+      position: absolute; bottom: 8px; right: 8px;
+      background-color: #e64980; color: white;
+      font-size: 0.75rem; font-weight: 800;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: 2px solid #fff;
+      z-index: 2;
+    }
+
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(2px);
+      z-index: 1000; justify-content: center; align-items: center;
+    }
+    .modal-card {
+      background: #ffffff; width: 100%; max-width: 420px; border-radius: 20px;
+      padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); position: relative;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-header h3 { margin: 0; font-size: 1.15rem; color: #222; font-weight: 700; }
+    .close-btn { border: none; background: none; font-size: 1.3rem; cursor: pointer; color: #888; }
+
+    .movie-item-card {
+      display: flex; gap: 14px; padding: 12px; border-radius: 12px;
+      border: 1px solid #eee; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;
+      align-items: center;
+    }
+    .movie-item-card:hover { background-color: #fcfbfa; border-color: #e2d9c8; }
+    .item-poster { width: 50px; height: 70px; object-fit: cover; border-radius: 6px; background-color: #eee; flex-shrink: 0; pointer-events: none; }
+    .item-info { display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
+    .item-title { font-weight: 700; font-size: 1rem; color: #222; margin-bottom: 4px; }
+    .item-sub { font-size: 0.8rem; color: #777; }
+
+    .detail-container { text-align: center; }
+    .detail-poster { width: 160px; height: 230px; object-fit: cover; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 16px; background-color: #eee; }
+    .detail-title { font-size: 1.3rem; font-weight: 800; color: #222; margin-bottom: 16px; }
+    
+    .detail-card {
+      background-color: #f4efe4; border-radius: 12px; padding: 16px; text-align: left;
+      font-size: 0.85rem; margin-bottom: 16px;
+    }
+    .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .detail-row:last-child { margin-bottom: 0; }
+    .detail-divider { margin: 8px 0; border-top: 1px dashed #dcd3be; }
+    .detail-label { color: #888070; font-weight: 500; min-width: 70px; }
+    .detail-val { color: #333; font-weight: 600; text-align: right; word-break: keep-all; }
+    
+    .action-btn-group { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-edit {
+      flex: 1; padding: 12px; background-color: #f4efe4; color: #444;
+      border: 1px solid #dcd3be; border-radius: 10px; font-weight: 700; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-edit:hover { background-color: #e8dfcc; }
+    .btn-delete {
+      flex: 1; padding: 12px; background-color: transparent; color: #c92a2a;
+      border: 1px solid #f87171; border-radius: 10px; font-weight: 700; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-delete:hover { background-color: #fff5f5; }
+
+    .form-group { margin-bottom: 14px; text-align: left; position: relative; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 6px; color: #666; }
+    .input-box { width: 100%; padding: 10px 12px; border: 1px solid #e2e2e2; border-radius: 8px; font-size: 0.9rem; }
+    
+    .autocomplete-list {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: #ffffff; border: 1px solid #dcd3be; border-radius: 10px;
+      max-height: 250px; overflow-y: auto; z-index: 100;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.12); display: none; margin-top: 4px;
+    }
+    .autocomplete-item {
+      padding: 10px 12px; border-bottom: 1px solid #f2f2f2; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .autocomplete-item:last-child { border-bottom: none; }
+    .autocomplete-item:hover { background-color: #fdfaf5; }
+    .auto-title { font-weight: 700; font-size: 0.9rem; color: #222; }
+    .auto-sub { font-size: 0.75rem; color: #888; }
+
+    .time-picker-box {
+      display: inline-flex; align-items: center; border: 1px solid #e2e2e2;
+      border-radius: 8px; padding: 4px 8px; background: #fff; width: 130px;
+    }
+    .time-picker-box:focus-within { border-color: #b58d53; }
+    .time-num-input {
+      width: 32px; border: none; outline: none; text-align: center;
+      font-size: 0.9rem; font-weight: 600; color: #333; background: transparent;
+    }
+    .time-colon { font-weight: 700; color: #777; margin: 0 2px; user-select: none; }
+
+    .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header-card">
+    <div class="header-top">
+      <div class="sub-title">FILM NOTE · 관람 기록</div>
+      <div class="auth-box">
+        <img id="userProfile" class="user-profile" src="" alt="Profile">
+        <button id="authBtn" class="btn-auth" onclick="window.handleAuth()">
+          <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+          <span id="authBtnText">구글 로그인</span>
+        </button>
+      </div>
+    </div>
+    
+    <h1 class="month-title" id="calendar-title">2026. 9</h1>
+    <div class="nav-btns">
+      <button class="btn-circle" onclick="window.changeMonth(-1)">&lt;</button>
+      <button class="btn-circle" onclick="window.changeMonth(1)">&gt;</button>
+    </div>
+    <div class="summary-text" id="month-summary">불러오는 중...</div>
+    <button class="today-btn" onclick="window.goToday()">오늘</button>
+  </div>
+
+  <div class="calendar-grid" id="calendar-grid"></div>
+</div>
+
+<!-- 목록 모달 -->
+<div class="modal-overlay" id="listModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="listModalTitle">관람 목록</h3>
+      <button class="close-btn" onclick="window.closeModal('listModal')">&times;</button>
+    </div>
+    <div id="movieListContainer"></div>
+    <button class="btn-submit" style="background:#555; margin-top:10px;" onclick="window.openAddModalDirect()">+ 새 영화 기록 추가</button>
+  </div>
+</div>
+
+<!-- 상세 모달 -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>관람 기록</h3>
+      <button class="close-btn" onclick="window.closeModal('detailModal')">&times;</button>
+    </div>
+    <div class="detail-container">
+      <img id="detailPoster" src="" class="detail-poster" onerror="this.onerror=null; this.src='https://via.placeholder.com/160x230/dcd3be/ffffff?text=No+Poster';">
+      <div id="detailTitle" class="detail-title">영화 제목</div>
+      
+      <div class="detail-card">
+        <div class="detail-row"><span class="detail-label">관람 날짜</span><span id="detailDate" class="detail-val"></span></div>
+        <div class="detail-row"><span class="detail-label">영화관</span><span id="detailCinema" class="detail-val"></span></div>
+        <div class="detail-row"><span class="detail-label">상영 시간</span><span id="detailTime" class="detail-val"></span></div>
+        <div class="detail-row"><span class="detail-label">총 상영시간</span><span id="detailDuration" class="detail-val"></span></div>
+        
+        <div class="detail-divider"></div>
+        
+        <div class="detail-row"><span class="detail-label">개봉일</span><span id="detailOpenDt" class="detail-val">정보 없음</span></div>
+        <div class="detail-row"><span class="detail-label">감독</span><span id="detailDirector" class="detail-val">정보 없음</span></div>
+        <div class="detail-row"><span class="detail-label">출연진</span><span id="detailActors" class="detail-val">정보 없음</span></div>
+      </div>
+
+      <div class="action-btn-group">
+        <button class="btn-edit" onclick="window.openEditModal()">기록 수정</button>
+        <button class="btn-delete" onclick="window.deleteCurrentRecord()">기록 삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 입력 및 수정 모달 -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="addModalTitle">기록 추가</h3>
+      <button class="close-btn" onclick="window.closeModal('addModal')">&times;</button>
+    </div>
+    <input type="hidden" id="editRecordId">
+    <input type="hidden" id="selectedDate">
+    <input type="hidden" id="openDtVal">
+    <input type="hidden" id="directorVal">
+    <input type="hidden" id="actorsVal">
+    <input type="hidden" id="posterUrlVal">
+    
+    <div class="form-group">
+      <label>영화 제목</label>
+      <input type="text" class="input-box" id="movieTitle" placeholder="영화 제목 입력..." oninput="window.handleTitleInput(this.value)">
+      <div class="autocomplete-list" id="autoCompleteList"></div>
+    </div>
+    <div class="form-group">
+      <label>관람 영화관</label>
+      <input type="text" class="input-box" id="cinema" placeholder="예: CGV 안산">
+    </div>
+    
+    <div class="form-group">
+      <label>상영 시간 (24시간제 / 새벽 입력 가능)</label>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="time-picker-box">
+          <input type="text" id="startH" class="time-num-input" placeholder="23" maxlength="2" oninput="window.handleTimeInput(this, 'startM')">
+          <span class="time-colon">:</span>
+          <input type="text" id="startM" class="time-num-input" placeholder="50" maxlength="2" oninput="window.handleTimeInput(this, 'endH')">
+        </div>
+        <span>~</span>
+        <div class="time-picker-box">
+          <input type="text" id="endH" class="time-num-input" placeholder="25" maxlength="2" oninput="window.handleTimeInput(this, 'endM')">
+          <span class="time-colon">:</span>
+          <input type="text" id="endM" class="time-num-input" placeholder="12" maxlength="2" oninput="window.handleTimeInput(this, null)">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>계산된 러닝타임</label>
+      <input type="text" class="input-box" id="duration" readonly placeholder="시간 입력 시 자동 계산됨" style="background:#f9f9f9;">
+    </div>
+    <div class="form-group">
+      <label>검색된 메타 정보 (포스터 자동 연동)</label>
+      <input type="text" class="input-box" id="movieMetaPreview" readonly placeholder="영화 선택 시 정보 표시됨" style="background:#f9f9f9;">
+    </div>
+    <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { 
+    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where 
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import { 
+    getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
+  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCSPiOoFvq4zJe_U1HyFlHZHeLs1pHFeW8",
+    authDomain: "film-note-7139b.firebaseapp.com",
+    projectId: "film-note-7139b",
+    storageBucket: "film-note-7139b.firebasestorage.app",
+    messagingSenderId: "915603733331",
+    appId: "1:915603733331:web:ba61cf156e6496c884bfa6"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+
+  const KMDB_KEY = 'APIGH5EGEZH1P3KX0TOG';
+  const DEFAULT_POSTER = 'https://via.placeholder.com/150/dcd3be/ffffff?text=No+Poster';
+  
+  let currentDate = new Date();
+  let movieLogs = [];
+  let activeRecordId = null;
+  let debounceTimer = null;
+  let currentUser = null;
+  let unsubscribeSnapshot = null;
+
+  window.handleAuth = function() {
+    if (currentUser) {
+      signOut(auth).then(() => alert("로그아웃 되었습니다.")).catch(console.error);
+    } else {
+      signInWithPopup(auth, provider).catch(err => {
+        console.error("로그인 실패:", err);
+        alert(`구글 로그인에 실패했습니다.\n사유: ${err.message}`);
+      });
+    }
+  };
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    const authBtnText = document.getElementById('authBtnText');
+    const userProfile = document.getElementById('userProfile');
+
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+    if (user) {
+      authBtnText.innerText = '로그아웃';
+      if (user.photoURL) {
+        userProfile.src = user.photoURL;
+        userProfile.style.display = 'block';
+      }
+      
+      const q = query(collection(db, "movieLogs"), where("uid", "==", user.uid));
+      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+        movieLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderCalendar();
+      }, (err) => console.error("Firestore 수신 오류:", err));
+    } else {
+      authBtnText.innerText = '구글 로그인';
+      userProfile.style.display = 'none';
+      movieLogs = [];
+      renderCalendar();
+    }
+  });
+
+  window.closeModal = function(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) modal.style.display = 'none';
+    hideAutoComplete();
+  };
+
+  window.closeAllModals = function() {
+    ['listModal', 'detailModal', 'addModal'].forEach(id => window.closeModal(id));
+  };
+
+  window.handleDateClick = function(dateStr) {
+    if (!currentUser) {
+      alert('로그인이 필요한 서비스입니다.');
+      return;
+    }
+
+    document.getElementById('selectedDate').value = dateStr;
+    const logs = movieLogs.filter(l => l.date === dateStr);
+
+    if (logs.length === 0) {
+      window.openAddModal(dateStr);
+    } else {
+      window.openListModal(dateStr, logs);
+    }
+  };
+
+  window.openListModal = function(dateStr, logs) {
+    document.getElementById('listModalTitle').innerText = `${dateStr} 관람 목록`;
+    const container = document.getElementById('movieListContainer');
+    container.innerHTML = '';
+
+    const sortedLogs = [...logs].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+    sortedLogs.forEach(log => {
+      const poster = log.poster || DEFAULT_POSTER;
+      const timeStr = (log.startTime || log.endTime) ? `${log.startTime || ''} ~ ${log.endTime || ''}` : '시간 미입력';
+      
+      container.innerHTML += `
+        <div class="movie-item-card" onclick="window.openDetailModal('${log.id}')">
+          <img src="${poster}" class="item-poster" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
+          <div class="item-info">
+            <div class="item-title">${log.title}</div>
+            <div class="item-sub">${log.cinema || '영화관 미입력'} | ${timeStr}</div>
+          </div>
+        </div>
+      `;
+    });
+    document.getElementById('listModal').style.display = 'flex';
+  };
+
+  window.openDetailModal = function(id) {
+    const record = movieLogs.find(l => String(l.id) === String(id));
+    if (!record) return;
+
+    activeRecordId = String(id);
+    window.closeModal('listModal');
+
+    document.getElementById('detailPoster').src = record.poster || DEFAULT_POSTER;
+    document.getElementById('detailTitle').innerText = record.title;
+    document.getElementById('detailDate').innerText = record.date;
+    document.getElementById('detailCinema').innerText = record.cinema || '정보 없음';
+    
+    const timeStr = (record.startTime || record.endTime) ? `${record.startTime || ''} ~ ${record.endTime || ''}` : '정보 없음';
+    document.getElementById('detailTime').innerText = timeStr;
+    document.getElementById('detailDuration').innerText = record.duration || '정보 없음';
+    
+    document.getElementById('detailOpenDt').innerText = record.openDt || '정보 없음';
+    document.getElementById('detailDirector').innerText = record.director || '정보 없음';
+    document.getElementById('detailActors').innerText = record.actors || '정보 없음';
+
+    document.getElementById('detailModal').style.display = 'flex';
+  };
+
+  window.openEditModal = function() {
+    const record = movieLogs.find(l => String(l.id) === String(activeRecordId));
+    if (!record) return;
+
+    window.closeModal('detailModal');
+
+    document.getElementById('addModalTitle').innerText = '관람 기록 수정';
+    document.getElementById('saveBtn').innerText = '기록 수정하기';
+    document.getElementById('editRecordId').value = record.id;
+    document.getElementById('selectedDate').value = record.date;
+
+    document.getElementById('movieTitle').value = record.title;
+    document.getElementById('cinema').value = record.cinema || '';
+    document.getElementById('posterUrlVal').value = record.poster || DEFAULT_POSTER;
+
+    if (record.startTime && record.startTime.includes(':')) {
+      const [sH, sM] = record.startTime.split(':');
+      document.getElementById('startH').value = sH;
+      document.getElementById('startM').value = sM;
+    } else {
+      document.getElementById('startH').value = '';
+      document.getElementById('startM').value = '';
+    }
+
+    if (record.endTime && record.endTime.includes(':')) {
+      const [eH, eM] = record.endTime.split(':');
+      document.getElementById('endH').value = eH;
+      document.getElementById('endM').value = eM;
+    } else {
+      document.getElementById('endH').value = '';
+      document.getElementById('endM').value = '';
+    }
+
+    document.getElementById('openDtVal').value = record.openDt || '';
+    document.getElementById('directorVal').value = record.director || '';
+    document.getElementById('actorsVal').value = record.actors || '';
+    
+    document.getElementById('movieMetaPreview').value = record.openDt ? `개봉: ${record.openDt} | 감독: ${record.director} | 출연: ${record.actors}` : '';
+
+    calcDuration();
+    document.getElementById('addModal').style.display = 'flex';
+  };
+
+  window.deleteCurrentRecord = async function() {
+    if (!currentUser) return alert('로그인이 필요합니다.');
+    if (!activeRecordId) return;
+    if (!confirm('이 관람 기록을 정말 삭제하시겠습니까?')) return;
+
+    try {
+      await deleteDoc(doc(db, "movieLogs", activeRecordId));
+      activeRecordId = null;
+    } catch (e) {
+      console.error("삭제 실패:", e);
+      alert("삭제 처리 중 오류가 발생했습니다.");
+    } finally {
+      window.closeAllModals();
+    }
+  };
+
+  window.openAddModal = function(dateStr) {
+    if (!currentUser) return alert('로그인이 필요한 서비스입니다.');
+
+    document.getElementById('addModalTitle').innerText = `${dateStr} 기록 추가`;
+    document.getElementById('saveBtn').innerText = '기록 저장하기';
+    document.getElementById('editRecordId').value = '';
+
+    document.getElementById('movieTitle').value = '';
+    document.getElementById('cinema').value = '';
+    document.getElementById('startH').value = '';
+    document.getElementById('startM').value = '';
+    document.getElementById('endH').value = '';
+    document.getElementById('endM').value = '';
+    document.getElementById('duration').value = '';
+    document.getElementById('movieMetaPreview').value = '';
+    document.getElementById('openDtVal').value = '';
+    document.getElementById('directorVal').value = '';
+    document.getElementById('actorsVal').value = '';
+    document.getElementById('posterUrlVal').value = DEFAULT_POSTER;
+    hideAutoComplete();
+    
+    document.getElementById('addModal').style.display = 'flex';
+  };
+
+  window.openAddModalDirect = function() {
+    window.closeModal('listModal');
+    window.openAddModal(document.getElementById('selectedDate').value);
+  };
+
+  window.handleTitleInput = function(val) {
+    clearTimeout(debounceTimer);
+    const query = val.trim();
+    if (!query) return hideAutoComplete();
+
+    debounceTimer = setTimeout(() => fetchKMDBAutoComplete(query), 300);
+  };
+
+  // KMDB 응답 텍스트 정제 함수 (태그 및 불필요한 공백 제거)
+  function cleanText(str) {
+    if (!str) return '';
+    return str.replace(/!HS/g, '').replace(/!HE/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  async function fetchKMDBAutoComplete(query) {
+    try {
+      // sort=prodYear,1 파라미터로 최신 영화/제작년도 순으로 정렬
+      const res = await fetch(`https://api.koreafilm.or.kr/openapi-data2/wisenut/search_api/search_json2.jsp?collection=kmdb_new2&ServiceKey=${KMDB_KEY}&query=${encodeURIComponent(query)}&sort=prodYear,1&listCount=15`);
+      const data = await res.json();
+      const list = data.Data?.[0]?.Result || [];
+
+      const autoBox = document.getElementById('autoCompleteList');
+      autoBox.innerHTML = '';
+
+      if (list.length === 0) return hideAutoComplete();
+
+      list.slice(0, 8).forEach(movie => {
+        const title = cleanText(movie.title) || '제목 없음';
+        const prodYear = movie.prodYear || '연도 미정';
+        
+        // KMDB 감독 정보 파싱 (directors.director 내 지침)
+        let director = '감독 미상';
+        const dirList = movie.directors?.director || movie.directors?.directive || [];
+        if (Array.isArray(dirList) && dirList.length > 0) {
+          const names = dirList.map(d => cleanText(d.directorNm)).filter(n => n !== '');
+          if (names.length > 0) director = names.join(', ');
+        }
+
+        // 포스터 이미지 URL 처리
+        let posterUrl = DEFAULT_POSTER;
+        if (movie.posters) {
+          const firstPoster = movie.posters.split('|')[0];
+          if (firstPoster) posterUrl = firstPoster.trim();
+        }
+
+        // 개봉일 포맷팅
+        let openDt = movie.repRlsDate || '';
+        if (openDt.length === 8) {
+          openDt = `${openDt.substring(0,4)}-${openDt.substring(4,6)}-${openDt.substring(6,8)}`;
+        } else {
+          openDt = '정보 없음';
+        }
+
+        // 출연진 정보 파싱
+        let actors = '정보 없음';
+        const actorList = movie.actors?.actor || [];
+        if (Array.isArray(actorList) && actorList.length > 0) {
+          const actorNames = actorList.slice(0, 3).map(a => cleanText(a.actorNm)).filter(n => n !== '');
+          if (actorNames.length > 0) actors = actorNames.join(', ');
+        }
+
+        const safeTitle = title.replace(/'/g, "\\'");
+        const safeDir = director.replace(/'/g, "\\'");
+        const safeActors = actors.replace(/'/g, "\\'");
+        const safePoster = posterUrl.replace(/'/g, "\\'");
+
+        autoBox.innerHTML += `
+          <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${prodYear}', '${openDt}', '${safeDir}', '${safeActors}', '${safePoster}')">
+            <div>
+              <div class="auto-title">${title}</div>
+              <div class="auto-sub">${prodYear} · 감독: ${director}</div>
+            </div>
+            <span style="font-size: 0.75rem; color: #b58d53; font-weight:700;">선택</span>
+          </div>
+        `;
+      });
+
+      autoBox.style.display = 'block';
+    } catch (e) {
+      console.error('KMDB 자동완성 실패:', e);
+    }
+  }
+
+  window.selectMovie = function(movieNm, prodYear, openDt, director, actors, posterUrl) {
+    document.getElementById('movieTitle').value = movieNm;
+    hideAutoComplete();
+
+    document.getElementById('openDtVal').value = openDt;
+    document.getElementById('directorVal').value = director;
+    document.getElementById('actorsVal').value = actors;
+    document.getElementById('posterUrlVal').value = posterUrl;
+    
+    document.getElementById('movieMetaPreview').value = `개봉: ${openDt} | 감독: ${director} | 포스터 자동 연동됨`;
+  };
+
+  function hideAutoComplete() {
+    document.getElementById('autoCompleteList').style.display = 'none';
+  }
+
+  window.handleTimeInput = function(input, nextId) {
+    input.value = input.value.replace(/[^0-9]/g, '');
+    if (input.value.length === 2 && nextId) {
+      document.getElementById(nextId).focus();
+    }
+    calcDuration();
+  };
+
+  function calcDuration() {
+    const sH = parseInt(document.getElementById('startH').value, 10);
+    const sM = parseInt(document.getElementById('startM').value, 10) || 0;
+    const eH = parseInt(document.getElementById('endH').value, 10);
+    const eM = parseInt(document.getElementById('endM').value, 10) || 0;
+
+    if (isNaN(sH) || isNaN(eH) || sH < 0 || sH > 30 || eH < 0 || eH > 30 || sM < 0 || sM > 59 || eM < 0 || eM > 59) {
+      document.getElementById('duration').value = '';
+      return;
+    }
+
+    const startMins = sH * 60 + sM;
+    let endMins = eH * 60 + eM;
+    if (endMins < startMins) endMins += 24 * 60;
+
+    const diff = endMins - startMins;
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+
+    document.getElementById('duration').value = `${hours > 0 ? hours + '시간 ' : ''}${mins}분`;
+  }
+
+  window.saveRecord = async function() {
+    if (!currentUser) return alert('로그인이 필요합니다.');
+
+    const editId = document.getElementById('editRecordId').value;
+    const date = document.getElementById('selectedDate').value;
+    const title = document.getElementById('movieTitle').value;
+    if (!title) return alert('영화 제목을 입력하세요.');
+
+    const sH = document.getElementById('startH').value;
+    const sM = document.getElementById('startM').value;
+    const eH = document.getElementById('endH').value;
+    const eM = document.getElementById('endM').value;
+
+    const startTime = (sH !== '') ? `${sH.padStart(2, '0')}:${(sM || '00').padStart(2, '0')}` : '';
+    const endTime = (eH !== '') ? `${eH.padStart(2, '0')}:${(eM || '00').padStart(2, '0')}` : '';
+
+    const recordData = {
+      uid: currentUser.uid,
+      date: date,
+      title: title,
+      cinema: document.getElementById('cinema').value,
+      startTime: startTime,
+      endTime: endTime,
+      duration: document.getElementById('duration').value,
+      openDt: document.getElementById('openDtVal').value,
+      director: document.getElementById('directorVal').value,
+      actors: document.getElementById('actorsVal').value,
+      poster: document.getElementById('posterUrlVal').value.trim() || DEFAULT_POSTER,
+      createdAt: editId ? (movieLogs.find(l => l.id === editId)?.createdAt || Date.now()) : Date.now()
+    };
+
+    try {
+      if (editId) {
+        await setDoc(doc(db, "movieLogs", editId), recordData, { merge: true });
+      } else {
+        await addDoc(collection(db, "movieLogs"), recordData);
+      }
+    } catch (e) {
+      console.error("저장 중 오류 발생:", e);
+      alert("저장 과정에서 오류가 발생했습니다.");
+    } finally {
+      window.closeAllModals();
+    }
+  };
+
+  function renderCalendar() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    document.getElementById('calendar-title').innerText = `${year}. ${month + 1}`;
+    const grid = document.getElementById('calendar-grid');
+    grid.innerHTML = '';
+
+    ['일','월','화','수','목','금','토'].forEach(n => {
+      grid.innerHTML += `<div class="day-name">${n}</div>`;
+    });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const lastDate = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div class="empty-cell"></div>`;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    let monthLogCount = 0;
+
+    for (let date = 1; date <= lastDate; date++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
+      const logs = movieLogs.filter(l => l.date === dateStr);
+      monthLogCount += logs.length;
+
+      const isToday = dateStr === todayStr ? 'today' : '';
+      let styleAttr = '';
+      let badgeHtml = '';
+      let extraClass = '';
+
+      if (logs.length > 0) {
+        const sortedLogs = [...logs].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        const firstLog = sortedLogs[0];
+        
+        if (firstLog && firstLog.poster && firstLog.poster !== DEFAULT_POSTER) {
+          styleAttr = `style="background-image: url('${firstLog.poster}');"`;
+        } else {
+          extraClass = 'has-record-no-poster';
+        }
+        
+        if (logs.length > 1) {
+          badgeHtml = `<div class="count-badge">${logs.length}</div>`;
+        }
+      }
+
+      grid.innerHTML += `
+        <div class="day-cell ${isToday} ${extraClass}" ${styleAttr} onclick="window.handleDateClick('${dateStr}')">
+          <span class="day-number">${date}</span>
+          ${badgeHtml}
+        </div>
+      `;
+    }
+
+    const summaryText = document.getElementById('month-summary');
+    if (!currentUser) {
+      summaryText.innerText = '로그인하면 관람 기록을 볼 수 있어요.';
+    } else {
+      summaryText.innerText = monthLogCount > 0 ? `이번 달 총 ${monthLogCount}편의 영화를 기록했어요.` : '이번 달 관람 기록이 없어요';
+    }
+  }
+
+  window.changeMonth = function(d) { currentDate.setMonth(currentDate.getMonth() + d); renderCalendar(); };
+  window.goToday = function() { currentDate = new Date(); renderCalendar(); };
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.form-group')) {
+      hideAutoComplete();
+    }
+  });
+
+  renderCalendar();
+</script>
+</body>
+</html>
