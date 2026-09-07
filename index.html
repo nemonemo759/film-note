@@ -320,6 +320,9 @@
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
+  // 👇 이 줄을 추가해주세요! (로그인 시 무조건 계정 선택 창을 강제로 띄우는 옵션)
+  provider.setCustomParameters({ prompt: 'select_account' });
+
   const KMDB_KEY = 'APIGH5EGEZH1P3KX0TOG';
   const DEFAULT_POSTER = 'https://via.placeholder.com/150/dcd3be/ffffff?text=No+Poster';
   
