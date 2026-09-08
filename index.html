@@ -623,7 +623,7 @@
       // TMDB 포스터 조회
       (async () => {
         try {
-          const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}&year=${prodYear}`;
+          const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
           const res = await fetch(tmdbUrl);
           const data = await res.json();
           if (data.results && data.results.length > 0 && data.results[0].poster_path) {
