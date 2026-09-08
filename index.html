@@ -4,10 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FILM NOTE - 관람 기록</title>
-
-  <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="icon" type="image/svg+xml" href="icon.svg">
-  
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   
   <style>
@@ -324,10 +320,8 @@
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // 👇 이 줄을 추가해주세요! (로그인 시 무조건 계정 선택 창을 강제로 띄우는 옵션)
-  provider.setCustomParameters({ prompt: 'select_account' });
-
-  const KMDB_KEY = 'APIGH5EGEZH1P3KX0TOG';
+  // TMDB API KEY 및 포스터 베이스 URL 설정
+  const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
   const DEFAULT_POSTER = 'https://via.placeholder.com/150/dcd3be/ffffff?text=No+Poster';
   
   let currentDate = new Date();
@@ -541,66 +535,73 @@
     const query = val.trim();
     if (!query) return hideAutoComplete();
 
-    debounceTimer = setTimeout(() => fetchKMDBAutoComplete(query), 300);
+    debounceTimer = setTimeout(() => fetchTMDBAutoComplete(query), 300);
   };
 
-  function cleanText(str) {
-    if (!str) return '';
-    return str.replace(/!HS/g, '').replace(/!HE/g, '').replace(/\s+/g, ' ').trim();
-  }
-
-  async function fetchKMDBAutoComplete(query) {
+  // TMDB API 연동 자동완성 함수
+  async function fetchTMDBAutoComplete(query) {
     try {
-      const res = await fetch(`https://api.koreafilm.or.kr/openapi-data2/wisenut/search_api/search_json2.jsp?collection=kmdb_new2&ServiceKey=${KMDB_KEY}&query=${encodeURIComponent(query)}&sort=prodYear,1&listCount=15`);
+      const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(query)}&page=1&include_adult=false`;
+      const res = await fetch(searchUrl);
       const data = await res.json();
-      const list = data.Data?.[0]?.Result || [];
+      const list = data.results || [];
 
       const autoBox = document.getElementById('autoCompleteList');
       autoBox.innerHTML = '';
 
       if (list.length === 0) return hideAutoComplete();
 
-      list.slice(0, 8).forEach(movie => {
-        const title = cleanText(movie.title) || '제목 없음';
-        const prodYear = movie.prodYear || '연도 미정';
-        
-        let director = '감독 미상';
-        const dirList = movie.directors?.director || movie.directors?.directive || [];
-        if (Array.isArray(dirList) && dirList.length > 0) {
-          const names = dirList.map(d => cleanText(d.directorNm)).filter(n => n !== '');
-          if (names.length > 0) director = names.join(', ');
-        }
-
-        let posterUrl = DEFAULT_POSTER;
-        if (movie.posters) {
-          const firstPoster = movie.posters.split('|')[0];
-          if (firstPoster) posterUrl = firstPoster.trim();
-        }
-
-        let openDt = movie.repRlsDate || '';
-        if (openDt.length === 8) {
-          openDt = `${openDt.substring(0,4)}-${openDt.substring(4,6)}-${openDt.substring(6,8)}`;
-        } else {
-          openDt = '정보 없음';
-        }
-
+      // 상위 8개 항목에 대해 상세 정보(감독, 출연진) 병렬 조회
+      const promises = list.slice(0, 8).map(async (movie) => {
+        let director = '정보 없음';
         let actors = '정보 없음';
-        const actorList = movie.actors?.actor || [];
-        if (Array.isArray(actorList) && actorList.length > 0) {
-          const actorNames = actorList.slice(0, 3).map(a => cleanText(a.actorNm)).filter(n => n !== '');
-          if (actorNames.length > 0) actors = actorNames.join(', ');
+
+        try {
+          const detailUrl = `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_KEY}&language=ko-KR&append_to_response=credits`;
+          const detailRes = await fetch(detailUrl);
+          const detailData = await detailRes.json();
+
+          if (detailData.credits) {
+            // 감독 찾기
+            const dirObj = detailData.credits.crew?.find(c => c.job === 'Director');
+            if (dirObj) director = dirObj.name;
+
+            // 출연진 상위 3명 찾기
+            const castList = detailData.credits.cast?.slice(0, 3).map(c => c.name);
+            if (castList && castList.length > 0) actors = castList.join(', ');
+          }
+        } catch (err) {
+          console.error("TMDB 상세 정보 로드 실패:", err);
         }
 
-        const safeTitle = title.replace(/'/g, "\\'");
-        const safeDir = director.replace(/'/g, "\\'");
-        const safeActors = actors.replace(/'/g, "\\'");
-        const safePoster = posterUrl.replace(/'/g, "\\'");
+        const title = movie.title || '제목 없음';
+        const prodYear = movie.release_date ? movie.release_date.split('-')[0] : '연도 미정';
+        const openDt = movie.release_date || '정보 없음';
+        const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : DEFAULT_POSTER;
+
+        return {
+          title,
+          prodYear,
+          openDt,
+          director,
+          actors,
+          posterUrl
+        };
+      });
+
+      const moviesData = await Promise.all(promises);
+
+      moviesData.forEach(movie => {
+        const safeTitle = movie.title.replace(/'/g, "\\'");
+        const safeDir = movie.director.replace(/'/g, "\\'");
+        const safeActors = movie.actors.replace(/'/g, "\\'");
+        const safePoster = movie.posterUrl.replace(/'/g, "\\'");
 
         autoBox.innerHTML += `
-          <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${prodYear}', '${openDt}', '${safeDir}', '${safeActors}', '${safePoster}')">
+          <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${movie.prodYear}', '${movie.openDt}', '${safeDir}', '${safeActors}', '${safePoster}')">
             <div>
-              <div class="auto-title">${title}</div>
-              <div class="auto-sub">${prodYear} · 감독: ${director}</div>
+              <div class="auto-title">${movie.title}</div>
+              <div class="auto-sub">${movie.prodYear} · 감독: ${movie.director}</div>
             </div>
             <span style="font-size: 0.75rem; color: #b58d53; font-weight:700;">선택</span>
           </div>
@@ -609,7 +610,7 @@
 
       autoBox.style.display = 'block';
     } catch (e) {
-      console.error('KMDB 자동완성 실패:', e);
+      console.error('TMDB 자동완성 실패:', e);
     }
   }
 
