@@ -10,7 +10,6 @@
     * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; }
     body { background-color: #f7f4ed; color: #333; margin: 0; padding: 20px 12px; }
     
-    /* 모바일 폭 최적화 */
     .container { max-width: 680px; margin: 0 auto; padding: 0 4px; }
     
     .header-card {
@@ -44,7 +43,6 @@
     }
     .summary-text { font-size: 0.8rem; color: #8e8370; margin-top: 4px; }
 
-    /* 모바일 대응 반응형 달력 그리드 */
     .calendar-grid { 
       display: grid; 
       grid-template-columns: repeat(7, 1fr); 
@@ -52,7 +50,6 @@
     }
     .day-name { text-align: center; font-weight: 600; padding: 4px 0; color: #a39580; font-size: 0.8rem; }
     
-    /* 종횡비를 적용하여 세로로 늘어나는 현상 해결 */
     .day-cell {
       aspect-ratio: 1 / 1.25;
       height: auto;
@@ -290,7 +287,7 @@
       <input type="text" class="input-box" id="duration" readonly placeholder="시간 입력 시 자동 계산됨" style="background:#f9f9f9;">
     </div>
     <div class="form-group">
-      <label>검색된 메타 정보 (포스터 자동 연동)</label>
+      <label>검색된 메타 정보 (TMDB 포스터 연동)</label>
       <input type="text" class="input-box" id="movieMetaPreview" readonly placeholder="영화 선택 시 정보 표시됨" style="background:#f9f9f9;">
     </div>
     <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
@@ -320,7 +317,8 @@
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // TMDB API KEY 및 포스터 베이스 URL 설정
+  // API 키 설정 (메타 정보: KOFIC / 포스터: TMDB)
+  const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
   const DEFAULT_POSTER = 'https://via.placeholder.com/150/dcd3be/ffffff?text=No+Poster';
   
@@ -535,73 +533,52 @@
     const query = val.trim();
     if (!query) return hideAutoComplete();
 
-    debounceTimer = setTimeout(() => fetchTMDBAutoComplete(query), 300);
+    debounceTimer = setTimeout(() => fetchKoficTMDBAutoComplete(query), 300);
   };
 
-  // TMDB API 연동 자동완성 함수
-  async function fetchTMDBAutoComplete(query) {
+  // 1. 자동완성: KOFIC 기본 정보만 빠르게 조회하여 즉시 렌더링 (초고속)
+  async function fetchKoficTMDBAutoComplete(query) {
     try {
-      const searchUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(query)}&page=1&include_adult=false`;
-      const res = await fetch(searchUrl);
+      const koficUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(query)}&itemPerPage=6`;
+      const res = await fetch(koficUrl);
       const data = await res.json();
-      const list = data.results || [];
+      const list = data.movieListResult?.movieList || [];
 
       const autoBox = document.getElementById('autoCompleteList');
       autoBox.innerHTML = '';
 
       if (list.length === 0) return hideAutoComplete();
 
-      // 상위 8개 항목에 대해 상세 정보(감독, 출연진) 병렬 조회
-      const promises = list.slice(0, 8).map(async (movie) => {
-        let director = '정보 없음';
-        let actors = '정보 없음';
+      list.forEach(movie => {
+        const title = movie.movieNm || '제목 없음';
+        const prodYear = movie.prdtYear || '';
+        const movieCd = movie.movieCd || '';
 
-        try {
-          const detailUrl = `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_KEY}&language=ko-KR&append_to_response=credits`;
-          const detailRes = await fetch(detailUrl);
-          const detailData = await detailRes.json();
-
-          if (detailData.credits) {
-            // 감독 찾기
-            const dirObj = detailData.credits.crew?.find(c => c.job === 'Director');
-            if (dirObj) director = dirObj.name;
-
-            // 출연진 상위 3명 찾기
-            const castList = detailData.credits.cast?.slice(0, 3).map(c => c.name);
-            if (castList && castList.length > 0) actors = castList.join(', ');
+        // KOFIC 실제 개봉일 필드(openDt) 파싱
+        let openDt = '정보 없음';
+        if (movie.openDt) {
+          const raw = movie.openDt.replace(/-/g, '');
+          if (raw.length === 8) {
+            openDt = `${raw.substring(0,4)}-${raw.substring(4,6)}-${raw.substring(6,8)}`;
+          } else {
+            openDt = movie.openDt;
           }
-        } catch (err) {
-          console.error("TMDB 상세 정보 로드 실패:", err);
         }
 
-        const title = movie.title || '제목 없음';
-        const prodYear = movie.release_date ? movie.release_date.split('-')[0] : '연도 미정';
-        const openDt = movie.release_date || '정보 없음';
-        const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : DEFAULT_POSTER;
+        // KOFIC 감독 추출
+        let director = '정보 없음';
+        if (movie.directors && movie.directors.length > 0) {
+          director = movie.directors.map(d => d.peopleNm).join(', ');
+        }
 
-        return {
-          title,
-          prodYear,
-          openDt,
-          director,
-          actors,
-          posterUrl
-        };
-      });
-
-      const moviesData = await Promise.all(promises);
-
-      moviesData.forEach(movie => {
-        const safeTitle = movie.title.replace(/'/g, "\\'");
-        const safeDir = movie.director.replace(/'/g, "\\'");
-        const safeActors = movie.actors.replace(/'/g, "\\'");
-        const safePoster = movie.posterUrl.replace(/'/g, "\\'");
+        const safeTitle = title.replace(/'/g, "\\'");
+        const safeDir = director.replace(/'/g, "\\'");
 
         autoBox.innerHTML += `
-          <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${movie.prodYear}', '${movie.openDt}', '${safeDir}', '${safeActors}', '${safePoster}')">
+          <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${prodYear}', '${openDt}', '${safeDir}', '${movieCd}')">
             <div>
-              <div class="auto-title">${movie.title}</div>
-              <div class="auto-sub">${movie.prodYear} · 감독: ${movie.director}</div>
+              <div class="auto-title">${title}</div>
+              <div class="auto-sub">${prodYear} · 개봉: ${openDt} · 감독: ${director}</div>
             </div>
             <span style="font-size: 0.75rem; color: #b58d53; font-weight:700;">선택</span>
           </div>
@@ -610,20 +587,57 @@
 
       autoBox.style.display = 'block';
     } catch (e) {
-      console.error('TMDB 자동완성 실패:', e);
+      console.error('KOFIC 자동완성 실패:', e);
     }
   }
 
-  window.selectMovie = function(movieNm, prodYear, openDt, director, actors, posterUrl) {
+  // 2. 영화 선택 시: 선택된 1건에 대해서만 배우 상세정보 & TMDB 포스터를 비동기 병렬 연동
+  window.selectMovie = async function(movieNm, prodYear, openDt, director, movieCd) {
     document.getElementById('movieTitle').value = movieNm;
     hideAutoComplete();
 
     document.getElementById('openDtVal').value = openDt;
     document.getElementById('directorVal').value = director;
+    document.getElementById('movieMetaPreview').value = `조회 중... (개봉: ${openDt} | 감독: ${director})`;
+
+    let actors = '정보 없음';
+    let posterUrl = DEFAULT_POSTER;
+
+    await Promise.all([
+      // KOFIC 상세 조회 (배우)
+      (async () => {
+        if (!movieCd) return;
+        try {
+          const detailUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieInfo.json?key=${KOFIC_KEY}&movieCd=${movieCd}`;
+          const res = await fetch(detailUrl);
+          const data = await res.json();
+          const actorList = data.movieInfoResult?.movieInfo?.actors || [];
+          if (actorList.length > 0) {
+            actors = actorList.slice(0, 3).map(a => a.peopleNm).join(', ');
+          }
+        } catch (e) {
+          console.error("배우 정보 조회 실패:", e);
+        }
+      })(),
+
+      // TMDB 포스터 조회
+      (async () => {
+        try {
+          const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}&year=${prodYear}`;
+          const res = await fetch(tmdbUrl);
+          const data = await res.json();
+          if (data.results && data.results.length > 0 && data.results[0].poster_path) {
+            posterUrl = `https://image.tmdb.org/t/p/w500${data.results[0].poster_path}`;
+          }
+        } catch (e) {
+          console.error("포스터 조회 실패:", e);
+        }
+      })()
+    ]);
+
     document.getElementById('actorsVal').value = actors;
     document.getElementById('posterUrlVal').value = posterUrl;
-    
-    document.getElementById('movieMetaPreview').value = `개봉: ${openDt} | 감독: ${director} | 포스터 자동 연동됨`;
+    document.getElementById('movieMetaPreview').value = `개봉: ${openDt} | 감독: ${director} | 출연: ${actors}`;
   };
 
   function hideAutoComplete() {
