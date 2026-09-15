@@ -95,6 +95,7 @@
       color: #444;
       text-align: center;
       box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+      line-height: 1.6;
     }
 
     .modal-overlay {
@@ -223,8 +224,10 @@
 
   <div class="calendar-grid" id="calendar-grid"></div>
 
+  <!-- 하단 요약 영역 (시간 + 비용) -->
   <div class="monthly-cost-info">
-    이번 달 영화 관람에 사용하신 비용은 <b style="color: #C05621;">총 <span id="monthlyTotalCost">0</span>원</b> 입니다
+    이번 달 극장에서 보낸 시간은 <b style="color: #b58d53;"><span id="monthlyTotalTime">0분</span></b> 이며,<br>
+    영화 관람에 사용하신 비용은 <b style="color: #b03A2E;">총 <span id="monthlyTotalCost">0</span>원</b> 입니다
   </div>
 </div>
 
@@ -907,6 +910,7 @@
     const todayStr = new Date().toISOString().split('T')[0];
     let monthLogCount = 0;
     let monthlyTotalCost = 0;
+    let monthlyTotalMinutes = 0;
 
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
@@ -914,7 +918,21 @@
       monthLogCount += logs.length;
 
       logs.forEach(l => {
+        // 비용 계산
         monthlyTotalCost += Number(l.ticketPrice || 0);
+
+        // 시간(분) 합산 계산
+        if (l.startTime && l.endTime) {
+          const [sH, sM] = l.startTime.split(':').map(Number);
+          const [eH, eM] = l.endTime.split(':').map(Number);
+          if (!isNaN(sH) && !isNaN(eH)) {
+            const startMins = sH * 60 + (sM || 0);
+            let endMins = eH * 60 + (eM || 0);
+            if (endMins < startMins) endMins += 24 * 60; // 자정 심야 영화 처리
+            const diff = endMins - startMins;
+            if (diff > 0) monthlyTotalMinutes += diff;
+          }
+        }
       });
 
       const isToday = dateStr === todayStr ? 'today' : '';
@@ -923,7 +941,6 @@
       let extraClass = '';
 
       if (logs.length > 0) {
-        // 대표 포스터 지정 영화가 있으면 우선 사용, 없으면 상영 시작 시간 기준 첫 번째 영화 사용
         const sortedLogs = sortLogsByTime(logs);
         const mainLog = logs.find(l => l.isMainPoster) || sortedLogs[0];
         
@@ -946,8 +963,15 @@
       `;
     }
 
+    // 1. 총 비용 표기
     document.getElementById('monthlyTotalCost').innerText = monthlyTotalCost.toLocaleString();
 
+    // 2. 총 시간 표기 (포맷팅)
+    const hours = Math.floor(monthlyTotalMinutes / 60);
+    const mins = monthlyTotalMinutes % 60;
+    document.getElementById('monthlyTotalTime').innerText = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
+
+    // 3. 상단 안내 문구
     const summaryText = document.getElementById('month-summary');
     if (!currentUser) {
       summaryText.innerText = '로그인하면 관람 기록을 볼 수 있어요.';
