@@ -316,6 +316,9 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
 
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
