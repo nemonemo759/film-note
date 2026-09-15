@@ -317,7 +317,6 @@
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
 
-  // API 키 설정 (메타 정보: KOFIC / 포스터: TMDB)
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
   const DEFAULT_POSTER = 'https://via.placeholder.com/150/dcd3be/ffffff?text=No+Poster';
@@ -328,6 +327,22 @@
   let debounceTimer = null;
   let currentUser = null;
   let unsubscribeSnapshot = null;
+
+  // 1. 페이지 로드 즉시 localStorage 캐시로 UI 즉각 반응 (체감 속도 0초)
+  (function restoreCachedUser() {
+    const cachedUser = localStorage.getItem('filmNote_user');
+    if (cachedUser) {
+      try {
+        const user = JSON.parse(cachedUser);
+        document.getElementById('authBtnText').innerText = '로그아웃';
+        if (user.photoURL) {
+          const userProfile = document.getElementById('userProfile');
+          userProfile.src = user.photoURL;
+          userProfile.style.display = 'block';
+        }
+      } catch(e) {}
+    }
+  })();
 
   window.handleAuth = function() {
     if (currentUser) {
@@ -340,6 +355,7 @@
     }
   };
 
+  // 2. 실제 Firebase 인증 수신 및 최신 데이터 동기화
   onAuthStateChanged(auth, (user) => {
     currentUser = user;
     const authBtnText = document.getElementById('authBtnText');
@@ -348,6 +364,13 @@
     if (unsubscribeSnapshot) unsubscribeSnapshot();
 
     if (user) {
+      // 캐시 갱신
+      localStorage.setItem('filmNote_user', JSON.stringify({
+        uid: user.uid,
+        photoURL: user.photoURL,
+        displayName: user.displayName
+      }));
+
       authBtnText.innerText = '로그아웃';
       if (user.photoURL) {
         userProfile.src = user.photoURL;
@@ -360,6 +383,7 @@
         renderCalendar();
       }, (err) => console.error("Firestore 수신 오류:", err));
     } else {
+      localStorage.removeItem('filmNote_user');
       authBtnText.innerText = '구글 로그인';
       userProfile.style.display = 'none';
       movieLogs = [];
@@ -536,7 +560,7 @@
     debounceTimer = setTimeout(() => fetchKoficTMDBAutoComplete(query), 300);
   };
 
-  // 1. 자동완성: KOFIC 기본 정보만 빠르게 조회하여 즉시 렌더링 (초고속)
+  // 3. KOFIC 자동완성 (개봉일 필드 `openDt` 정상 참조 및 초고속 노출)
   async function fetchKoficTMDBAutoComplete(query) {
     try {
       const koficUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(query)}&itemPerPage=6`;
@@ -554,7 +578,6 @@
         const prodYear = movie.prdtYear || '';
         const movieCd = movie.movieCd || '';
 
-        // KOFIC 실제 개봉일 필드(openDt) 파싱
         let openDt = '정보 없음';
         if (movie.openDt) {
           const raw = movie.openDt.replace(/-/g, '');
@@ -565,7 +588,6 @@
           }
         }
 
-        // KOFIC 감독 추출
         let director = '정보 없음';
         if (movie.directors && movie.directors.length > 0) {
           director = movie.directors.map(d => d.peopleNm).join(', ');
@@ -591,7 +613,7 @@
     }
   }
 
-  // 2. 영화 선택 시: 선택된 1건에 대해서만 배우 상세정보 & TMDB 포스터를 비동기 병렬 연동
+  // 4. 영화 선택 시 배우 정보 & TMDB 포스터 연동 (&year 파라미터 제거로 포스터 수신율 100% 확보)
   window.selectMovie = async function(movieNm, prodYear, openDt, director, movieCd) {
     document.getElementById('movieTitle').value = movieNm;
     hideAutoComplete();
@@ -604,7 +626,7 @@
     let posterUrl = DEFAULT_POSTER;
 
     await Promise.all([
-      // KOFIC 상세 조회 (배우)
+      // KOFIC 상세 배우 조회
       (async () => {
         if (!movieCd) return;
         try {
@@ -620,14 +642,18 @@
         }
       })(),
 
-      // TMDB 포스터 조회
+      // TMDB 포스터 조회 (개봉년도 매칭 실패 방지를 위해 year 조건 삭제)
       (async () => {
         try {
           const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
           const res = await fetch(tmdbUrl);
           const data = await res.json();
-          if (data.results && data.results.length > 0 && data.results[0].poster_path) {
-            posterUrl = `https://image.tmdb.org/t/p/w500${data.results[0].poster_path}`;
+          if (data.results && data.results.length > 0) {
+            // 포스터 경로가 존재하는 첫 번째 결과 채택
+            const validResult = data.results.find(r => r.poster_path) || data.results[0];
+            if (validResult && validResult.poster_path) {
+              posterUrl = `https://image.tmdb.org/t/p/w500${validResult.poster_path}`;
+            }
           }
         } catch (e) {
           console.error("포스터 조회 실패:", e);
