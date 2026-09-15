@@ -303,7 +303,7 @@
 
     <div class="form-group">
       <label>티켓 가격 (원)</label>
-      <input type="number" class="input-box" id="ticketPrice" placeholder="예: 15000">
+      <input type="text" class="input-box" id="ticketPrice" placeholder="예: 15,000" oninput="window.formatPriceInput(this)">
     </div>
 
     <div class="form-group">
@@ -366,7 +366,7 @@
   let debounceTimer = null;
   let currentUser = null;
   let unsubscribeSnapshot = null;
-  let isSaving = false; // 중복 클릭 방지 플래그
+  let isSaving = false;
 
   (function restoreCachedUser() {
     const cachedUser = localStorage.getItem('filmNote_user');
@@ -427,6 +427,16 @@
       renderCalendar();
     }
   });
+
+  // 가격 입력 시 천단위 콤마 포맷팅 함수
+  window.formatPriceInput = function(input) {
+    let rawValue = input.value.replace(/[^0-9]/g, '');
+    if (rawValue) {
+      input.value = Number(rawValue).toLocaleString();
+    } else {
+      input.value = '';
+    }
+  };
 
   window.closeModal = function(modalId) {
     const modal = document.getElementById(modalId);
@@ -494,7 +504,7 @@
     document.getElementById('detailTime').innerText = timeStr;
     document.getElementById('detailDuration').innerText = record.duration || '정보 없음';
     
-    document.getElementById('detailPrice').innerText = record.ticketPrice ? `${Number(record.ticketPrice).toLocaleString()}원` : '0원';
+    document.getElementById('detailPrice').innerText = (record.ticketPrice !== undefined && record.ticketPrice !== null) ? `${Number(record.ticketPrice).toLocaleString()}원` : '0원';
     document.getElementById('detailPromotion').innerText = record.promotion || '없음';
 
     document.getElementById('detailOpenDt').innerText = record.openDt || '정보 없음';
@@ -517,7 +527,14 @@
 
     document.getElementById('movieTitle').value = record.title;
     document.getElementById('cinema').value = record.cinema || '';
-    document.getElementById('ticketPrice').value = record.ticketPrice || '';
+
+    // 0원 데이터 처리 보완 및 천단위 구분자 표기
+    if (record.ticketPrice !== undefined && record.ticketPrice !== null && record.ticketPrice !== '') {
+      document.getElementById('ticketPrice').value = Number(record.ticketPrice).toLocaleString();
+    } else {
+      document.getElementById('ticketPrice').value = '';
+    }
+
     document.getElementById('promotion').value = record.promotion || '없음';
     document.getElementById('posterUrlVal').value = record.poster || DEFAULT_POSTER;
 
@@ -739,10 +756,9 @@
     document.getElementById('duration').value = `${hours > 0 ? hours + '시간 ' : ''}${mins}분`;
   }
 
-  // ★ 완벽하게 보강된 비동기 및 예외처리 적용 함수
   window.saveRecord = async function() {
     if (!currentUser) return alert('로그인이 필요합니다.');
-    if (isSaving) return; // 저장 중 연속 클릭 방지
+    if (isSaving) return;
 
     const title = document.getElementById('movieTitle').value.trim();
     if (!title) return alert('영화 제목을 입력하세요.');
@@ -758,12 +774,16 @@
     const startTime = (sH !== '') ? `${sH.padStart(2, '0')}:${(sM || '00').padStart(2, '0')}` : '';
     const endTime = (eH !== '') ? `${eH.padStart(2, '0')}:${(eM || '00').padStart(2, '0')}` : '';
 
+    // 쉼표 제거 후 숫자 추출 (빈값일 때만 0)
+    const rawPrice = document.getElementById('ticketPrice').value.replace(/,/g, '').trim();
+    const parsedPrice = rawPrice !== '' ? Number(rawPrice) : 0;
+
     const recordData = {
       uid: currentUser.uid,
       date: date,
       title: title,
       cinema: document.getElementById('cinema').value,
-      ticketPrice: Number(document.getElementById('ticketPrice').value) || 0,
+      ticketPrice: parsedPrice,
       promotion: document.getElementById('promotion').value,
       startTime: startTime,
       endTime: endTime,
@@ -792,7 +812,6 @@
     } finally {
       isSaving = false;
       if (saveBtn) saveBtn.innerText = editId ? '기록 수정하기' : '기록 저장하기';
-      // 저장 성공 유무와 상관없이 팝업 닫기 확실하게 보장
       window.closeAllModals();
     }
   };
