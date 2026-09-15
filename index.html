@@ -114,13 +114,18 @@
     .movie-item-card {
       display: flex; gap: 12px; padding: 10px; border-radius: 12px;
       border: 1px solid #eee; margin-bottom: 10px; cursor: pointer; transition: background 0.2s;
-      align-items: center;
+      align-items: center; position: relative;
     }
     .movie-item-card:hover { background-color: #fcfbfa; border-color: #e2d9c8; }
     .item-poster { width: 45px; height: 63px; object-fit: cover; border-radius: 6px; background-color: #eee; flex-shrink: 0; pointer-events: none; }
     .item-info { display: flex; flex-direction: column; justify-content: center; pointer-events: none; }
     .item-title { font-weight: 700; font-size: 0.95rem; color: #222; margin-bottom: 4px; }
     .item-sub { font-size: 0.78rem; color: #777; }
+    .main-badge {
+      position: absolute; top: 10px; right: 10px;
+      background: #b58d53; color: white; font-size: 0.68rem; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+    }
 
     .detail-container { text-align: center; }
     .detail-poster { width: 150px; height: 215px; object-fit: cover; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 14px; background-color: #eee; }
@@ -136,6 +141,15 @@
     .detail-label { color: #888070; font-weight: 500; min-width: 70px; }
     .detail-val { color: #333; font-weight: 600; text-align: right; word-break: keep-all; }
     
+    .btn-main-poster {
+      width: 100%; padding: 10px; background-color: #fff; color: #b58d53;
+      border: 1px solid #b58d53; border-radius: 10px; font-weight: 700; cursor: pointer;
+      margin-bottom: 10px; transition: all 0.2s; font-size: 0.85rem;
+    }
+    .btn-main-poster.active {
+      background-color: #b58d53; color: #fff;
+    }
+
     .action-btn-group { display: flex; gap: 8px; margin-top: 12px; }
     .btn-edit {
       flex: 1; padding: 10px; background-color: #f4efe4; color: #444;
@@ -237,6 +251,8 @@
       <img id="detailPoster" src="" class="detail-poster" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x215/dcd3be/ffffff?text=No+Poster';">
       <div id="detailTitle" class="detail-title">영화 제목</div>
       
+      <button id="btnMainPoster" class="btn-main-poster" onclick="window.toggleMainPoster()">★ 캘린더 대표 포스터로 지정</button>
+
       <div class="detail-card">
         <div class="detail-row"><span class="detail-label">관람 날짜</span><span id="detailDate" class="detail-val"></span></div>
         <div class="detail-row"><span class="detail-label">영화관</span><span id="detailCinema" class="detail-val"></span></div>
@@ -336,7 +352,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { 
-    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where 
+    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch 
   } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
   import { 
     getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
@@ -428,7 +444,18 @@
     }
   });
 
-  // 가격 입력 시 천단위 콤마 포맷팅 함수
+  // 상영 시작시간 정렬용 유틸리티 함수
+  function sortLogsByTime(logs) {
+    return [...logs].sort((a, b) => {
+      const timeA = a.startTime || '99:99';
+      const timeB = b.startTime || '99:99';
+      if (timeA !== timeB) {
+        return timeA.localeCompare(timeB);
+      }
+      return (a.createdAt || 0) - (b.createdAt || 0);
+    });
+  }
+
   window.formatPriceInput = function(input) {
     let rawValue = input.value.replace(/[^0-9]/g, '');
     if (rawValue) {
@@ -469,12 +496,14 @@
     const container = document.getElementById('movieListContainer');
     container.innerHTML = '';
 
-    const sortedLogs = [...logs].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    // 상영 시작 시간 순으로 정렬
+    const sortedLogs = sortLogsByTime(logs);
 
     sortedLogs.forEach(log => {
       const poster = log.poster || DEFAULT_POSTER;
       const timeStr = (log.startTime || log.endTime) ? `${log.startTime || ''} ~ ${log.endTime || ''}` : '시간 미입력';
-      
+      const mainBadge = log.isMainPoster ? `<span class="main-badge">대표</span>` : '';
+
       container.innerHTML += `
         <div class="movie-item-card" onclick="window.openDetailModal('${log.id}')">
           <img src="${poster}" class="item-poster" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
@@ -482,6 +511,7 @@
             <div class="item-title">${log.title}</div>
             <div class="item-sub">${log.cinema || '영화관 미입력'} | ${timeStr}</div>
           </div>
+          ${mainBadge}
         </div>
       `;
     });
@@ -511,7 +541,50 @@
     document.getElementById('detailDirector').innerText = record.director || '정보 없음';
     document.getElementById('detailActors').innerText = record.actors || '정보 없음';
 
+    const btnMain = document.getElementById('btnMainPoster');
+    if (record.isMainPoster) {
+      btnMain.innerText = '★ 대표 포스터로 설정됨';
+      btnMain.classList.add('active');
+    } else {
+      btnMain.innerText = '☆ 캘린더 대표 포스터로 지정';
+      btnMain.classList.remove('active');
+    }
+
     document.getElementById('detailModal').style.display = 'flex';
+  };
+
+  window.toggleMainPoster = async function() {
+    if (!activeRecordId || !currentUser) return;
+    const currentRecord = movieLogs.find(l => String(l.id) === String(activeRecordId));
+    if (!currentRecord) return;
+
+    const sameDayLogs = movieLogs.filter(l => l.date === currentRecord.date);
+    const batch = writeBatch(db);
+
+    sameDayLogs.forEach(log => {
+      const logRef = doc(db, "movieLogs", log.id);
+      if (log.id === activeRecordId) {
+        batch.update(logRef, { isMainPoster: !currentRecord.isMainPoster });
+      } else {
+        batch.update(logRef, { isMainPoster: false });
+      }
+    });
+
+    try {
+      await batch.commit();
+      const updatedState = !currentRecord.isMainPoster;
+      const btnMain = document.getElementById('btnMainPoster');
+      if (updatedState) {
+        btnMain.innerText = '★ 대표 포스터로 설정됨';
+        btnMain.classList.add('active');
+      } else {
+        btnMain.innerText = '☆ 캘린더 대표 포스터로 지정';
+        btnMain.classList.remove('active');
+      }
+    } catch (e) {
+      console.error("대표 포스터 설정 오류:", e);
+      alert("대표 포스터 설정 중 오류가 발생했습니다.");
+    }
   };
 
   window.openEditModal = function() {
@@ -528,7 +601,6 @@
     document.getElementById('movieTitle').value = record.title;
     document.getElementById('cinema').value = record.cinema || '';
 
-    // 0원 데이터 처리 보완 및 천단위 구분자 표기
     if (record.ticketPrice !== undefined && record.ticketPrice !== null && record.ticketPrice !== '') {
       document.getElementById('ticketPrice').value = Number(record.ticketPrice).toLocaleString();
     } else {
@@ -774,7 +846,6 @@
     const startTime = (sH !== '') ? `${sH.padStart(2, '0')}:${(sM || '00').padStart(2, '0')}` : '';
     const endTime = (eH !== '') ? `${eH.padStart(2, '0')}:${(eM || '00').padStart(2, '0')}` : '';
 
-    // 쉼표 제거 후 숫자 추출 (빈값일 때만 0)
     const rawPrice = document.getElementById('ticketPrice').value.replace(/,/g, '').trim();
     const parsedPrice = rawPrice !== '' ? Number(rawPrice) : 0;
 
@@ -852,11 +923,12 @@
       let extraClass = '';
 
       if (logs.length > 0) {
-        const sortedLogs = [...logs].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-        const firstLog = sortedLogs[0];
+        // 대표 포스터 지정 영화가 있으면 우선 사용, 없으면 상영 시작 시간 기준 첫 번째 영화 사용
+        const sortedLogs = sortLogsByTime(logs);
+        const mainLog = logs.find(l => l.isMainPoster) || sortedLogs[0];
         
-        if (firstLog && firstLog.poster && firstLog.poster !== DEFAULT_POSTER) {
-          styleAttr = `style="background-image: url('${firstLog.poster}');"`;
+        if (mainLog && mainLog.poster && mainLog.poster !== DEFAULT_POSTER) {
+          styleAttr = `style="background-image: url('${mainLog.poster}');"`;
         } else {
           extraClass = 'has-record-no-poster';
         }
