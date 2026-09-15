@@ -84,6 +84,19 @@
       z-index: 2;
     }
 
+    .monthly-cost-info {
+      margin-top: 16px;
+      padding: 14px 18px;
+      background: #ffffff;
+      border-radius: 12px;
+      border: 1px solid #eee8dc;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #444;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+
     .modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(2px);
@@ -195,6 +208,11 @@
   </div>
 
   <div class="calendar-grid" id="calendar-grid"></div>
+
+  <!-- 달력 아래 월별 총 관람 비용 안내 문구 추가 -->
+  <div class="monthly-cost-info">
+    이번 달 영화 관람에 사용하신 비용은 총 <span id="monthlyTotalCost">0</span>원 입니다
+  </div>
 </div>
 
 <!-- 목록 모달 -->
@@ -225,6 +243,8 @@
         <div class="detail-row"><span class="detail-label">영화관</span><span id="detailCinema" class="detail-val"></span></div>
         <div class="detail-row"><span class="detail-label">상영 시간</span><span id="detailTime" class="detail-val"></span></div>
         <div class="detail-row"><span class="detail-label">총 상영시간</span><span id="detailDuration" class="detail-val"></span></div>
+        <div class="detail-row"><span class="detail-label">티켓 가격</span><span id="detailPrice" class="detail-val">0원</span></div>
+        <div class="detail-row"><span class="detail-label">프로모션</span><span id="detailPromotion" class="detail-val">없음</span></div>
         
         <div class="detail-divider"></div>
         
@@ -282,6 +302,28 @@
       </div>
     </div>
 
+    <!-- 추가 요구사항 1: 티켓 가격 입력칸 -->
+    <div class="form-group">
+      <label>티켓 가격 (원)</label>
+      <input type="number" class="input-box" id="ticketPrice" placeholder="예: 15000">
+    </div>
+
+    <!-- 추가 요구사항 2, 3: 프로모션 여부 드롭다운 (9개 항목) -->
+    <div class="form-group">
+      <label>프로모션 여부</label>
+      <select class="input-box" id="promotion">
+        <option value="없음">없음</option>
+        <option value="조조">조조</option>
+        <option value="관람권">관람권</option>
+        <option value="문화가 있는 날">문화가 있는 날</option>
+        <option value="할인권">할인권</option>
+        <option value="빵원티켓">빵원티켓</option>
+        <option value="무비싸다구">무비싸다구</option>
+        <option value="서프라이즈 쿠폰">서프라이즈 쿠폰</option>
+        <option value="스피드 쿠폰">스피드 쿠폰</option>
+      </select>
+    </div>
+
     <div class="form-group">
       <label>계산된 러닝타임</label>
       <input type="text" class="input-box" id="duration" readonly placeholder="시간 입력 시 자동 계산됨" style="background:#f9f9f9;">
@@ -316,9 +358,6 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({
-    prompt: 'select_account'
-  });
 
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
@@ -460,6 +499,9 @@
     document.getElementById('detailTime').innerText = timeStr;
     document.getElementById('detailDuration').innerText = record.duration || '정보 없음';
     
+    document.getElementById('detailPrice').innerText = record.ticketPrice ? `${Number(record.ticketPrice).toLocaleString()}원` : '0원';
+    document.getElementById('detailPromotion').innerText = record.promotion || '없음';
+
     document.getElementById('detailOpenDt').innerText = record.openDt || '정보 없음';
     document.getElementById('detailDirector').innerText = record.director || '정보 없음';
     document.getElementById('detailActors').innerText = record.actors || '정보 없음';
@@ -480,6 +522,8 @@
 
     document.getElementById('movieTitle').value = record.title;
     document.getElementById('cinema').value = record.cinema || '';
+    document.getElementById('ticketPrice').value = record.ticketPrice || '';
+    document.getElementById('promotion').value = record.promotion || '없음';
     document.getElementById('posterUrlVal').value = record.poster || DEFAULT_POSTER;
 
     if (record.startTime && record.startTime.includes(':')) {
@@ -535,6 +579,8 @@
 
     document.getElementById('movieTitle').value = '';
     document.getElementById('cinema').value = '';
+    document.getElementById('ticketPrice').value = '';
+    document.getElementById('promotion').value = '없음';
     document.getElementById('startH').value = '';
     document.getElementById('startM').value = '';
     document.getElementById('endH').value = '';
@@ -724,6 +770,8 @@
       date: date,
       title: title,
       cinema: document.getElementById('cinema').value,
+      ticketPrice: Number(document.getElementById('ticketPrice').value) || 0,
+      promotion: document.getElementById('promotion').value,
       startTime: startTime,
       endTime: endTime,
       duration: document.getElementById('duration').value,
@@ -767,11 +815,17 @@
 
     const todayStr = new Date().toISOString().split('T')[0];
     let monthLogCount = 0;
+    let monthlyTotalCost = 0;
 
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
       const logs = movieLogs.filter(l => l.date === dateStr);
       monthLogCount += logs.length;
+
+      // 이번 달 총 티켓 가격 합산
+      logs.forEach(l => {
+        monthlyTotalCost += Number(l.ticketPrice || 0);
+      });
 
       const isToday = dateStr === todayStr ? 'today' : '';
       let styleAttr = '';
@@ -800,6 +854,9 @@
         </div>
       `;
     }
+
+    // 이번 달 합산 금액 업데이트
+    document.getElementById('monthlyTotalCost').innerText = monthlyTotalCost.toLocaleString();
 
     const summaryText = document.getElementById('month-summary');
     if (!currentUser) {
