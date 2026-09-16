@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/holidays-kr@latest/dist/umd/index.bundle.js"></script>
   
   <style>
     * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -264,6 +265,16 @@
   }
   .swal2-popup .swal2-title { font-size: 16px !important; margin: 5px 0 !important; }
   .swal2-popup .swal2-actions { margin-top: 8px !important; }
+
+  /* 공휴일 / 일요일 (빨간색) */
+  .text-red, .text-red .day-number {
+    color: #ff4d4f !important;
+  }
+
+  /* 토요일 (파란색) */
+  .text-blue, .text-blue .day-number {
+    color: #1890ff !important;
+  }    
   </style>
 </head>
 <body>
@@ -1150,6 +1161,17 @@ window.deleteCurrentRecord = async function() {
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
       const logs = movieLogs.filter(l => l.date === dateStr);
+      // 요일 및 공휴일 판별 (CDN 활용)
+      const targetDate = new Date(year, month, date);
+      const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
+      const isHoliday = HolidaysKr.isHoliday(targetDate);
+
+      let dateColorClass = '';
+      if (dayOfWeek === 0 || isHoliday) {
+        dateColorClass = 'text-red';  // 일요일, 대체공휴일, 국경일 등
+      } else if (dayOfWeek === 6) {
+        dateColorClass = 'text-blue'; // 토요일
+      }
       monthLogCount += logs.length;
 
       logs.forEach(l => {
@@ -1171,7 +1193,7 @@ window.deleteCurrentRecord = async function() {
       const isToday = dateStr === todayStr ? 'today' : '';
       let styleAttr = '';
       let badgeHtml = '';
-      let extraClass = '';
+      let extraClass = dateColorClass;
 
       if (logs.length > 0) {
         const sortedLogs = sortLogsByTime(logs);
