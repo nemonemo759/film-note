@@ -202,14 +202,16 @@
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
 
+    /* 포스터 확대창 완전 정중앙 정렬 수정 */
     .poster-modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0, 0, 0, 0.92); backdrop-filter: blur(8px);
-      z-index: 3000; justify-content: center; align-items: center; padding: 0;
-      margin: 0; cursor: zoom-out;
+      z-index: 3000; justify-content: center; align-items: center;
+      padding: 20px; margin: 0; cursor: zoom-out; box-sizing: border-box;
+      overflow: hidden;
     }
     .poster-modal-img {
-      max-width: 90vw; max-height: 90vh;
+      max-width: 90vw; max-height: 85vh;
       width: auto; height: auto;
       border-radius: 8px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.8);
@@ -315,34 +317,35 @@
     
     <div class="form-group">
       <label>영화 제목</label>
-      <input type="text" class="input-box" id="movieTitle" placeholder="영화 제목 입력..." oninput="window.handleTitleInput(this.value)">
+      <!-- autocomplete="off" 추가로 텍스트 자동입력 팝업 차단 -->
+      <input type="text" class="input-box" id="movieTitle" placeholder="영화 제목 입력..." autocomplete="off" oninput="window.handleTitleInput(this.value)">
       <div class="autocomplete-list" id="autoCompleteList"></div>
     </div>
     <div class="form-group">
       <label>관람 영화관</label>
-      <input type="text" class="input-box" id="cinema" placeholder="예: CGV 안산">
+      <input type="text" class="input-box" id="cinema" placeholder="예: CGV 안산" autocomplete="off">
     </div>
     
     <div class="form-group">
       <label>상영 시간 (24시간제)</label>
       <div style="display: flex; gap: 8px; align-items: center;">
         <div class="time-picker-box">
-          <input type="text" id="startH" class="time-num-input" placeholder="23" maxlength="2" oninput="window.handleTimeInput(this, 'startM')">
+          <input type="text" id="startH" class="time-num-input" placeholder="23" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'startM')">
           <span class="time-colon">:</span>
-          <input type="text" id="startM" class="time-num-input" placeholder="50" maxlength="2" oninput="window.handleTimeInput(this, 'endH')">
+          <input type="text" id="startM" class="time-num-input" placeholder="50" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endH')">
         </div>
         <span>~</span>
         <div class="time-picker-box">
-          <input type="text" id="endH" class="time-num-input" placeholder="25" maxlength="2" oninput="window.handleTimeInput(this, 'endM')">
+          <input type="text" id="endH" class="time-num-input" placeholder="25" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endM')">
           <span class="time-colon">:</span>
-          <input type="text" id="endM" class="time-num-input" placeholder="12" maxlength="2" oninput="window.handleTimeInput(this, null)">
+          <input type="text" id="endM" class="time-num-input" placeholder="12" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, null)">
         </div>
       </div>
     </div>
 
     <div class="form-group">
       <label>티켓 가격 (원)</label>
-      <input type="text" class="input-box" id="ticketPrice" placeholder="예: 15,000" oninput="window.formatPriceInput(this)">
+      <input type="text" class="input-box" id="ticketPrice" placeholder="예: 15,000" autocomplete="off" oninput="window.formatPriceInput(this)">
     </div>
 
     <div class="form-group">
@@ -801,6 +804,16 @@
       if (yearMatch) targetYear = yearMatch[0];
     }
 
+    // [수정점 2] 아비정전 등 리마스터 영화 수거를 위한 영화 제목 정제함수
+    const cleanMovieTitle = (title) => {
+      return title
+        .replace(/\[.*?\]|\(.*?\)/g, '') // [리마스터ing], (1990) 등 괄호 제거
+        .replace(/리마스터|디지털|감독판|무삭제판|확장판|4K|3D/gi, '') // 수식어 제거
+        .trim();
+    };
+
+    const cleanedSearchTitle = cleanMovieTitle(movieNm) || movieNm;
+
     await Promise.all([
       (async () => {
         if (!movieCd) return;
@@ -819,12 +832,21 @@
 
       (async () => {
         try {
+          // 1차 검색: 정제된 제목 + 개봉 연도 조합
           let yearParam = targetYear ? `&primary_release_year=${targetYear}&year=${targetYear}` : '';
-          let tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}${yearParam}`;
+          let tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(cleanedSearchTitle)}${yearParam}`;
           let res = await fetch(tmdbUrl);
           let data = await res.json();
 
+          // 2차 검색: 연도 조건 없이 정제된 제목만으로 재시도 (리마스터는 제작/개봉연도가 엇갈릴 수 있음)
           if ((!data.results || data.results.length === 0) && yearParam) {
+            tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(cleanedSearchTitle)}`;
+            res = await fetch(tmdbUrl);
+            data = await res.json();
+          }
+
+          // 3차 검색: 정제 전 원본 제목 검색 fallback
+          if ((!data.results || data.results.length === 0) && cleanedSearchTitle !== movieNm) {
             tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
             res = await fetch(tmdbUrl);
             data = await res.json();
@@ -832,9 +854,11 @@
 
           if (data.results && data.results.length > 0) {
             let matchedResult = null;
+            // 1순위: 포스터가 존재하고 연도가 일치하는 영화
             if (targetYear) {
               matchedResult = data.results.find(r => r.poster_path && r.release_date && r.release_date.startsWith(targetYear));
             }
+            // 2순위: 연도 불일치 시에도 포스터가 존재하는 결과 선택
             if (!matchedResult) {
               matchedResult = data.results.find(r => r.poster_path) || data.results[0];
             }
