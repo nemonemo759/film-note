@@ -757,7 +757,7 @@
 
   async function fetchKoficTMDBAutoComplete(query) {
     try {
-      const koficUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(query)}&itemPerPage=6`;
+      const koficUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(query)}&itemPerPage=20`;
       const res = await fetch(koficUrl);
       const data = await res.json();
       const list = data.movieListResult?.movieList || [];
