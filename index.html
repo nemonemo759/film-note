@@ -754,15 +754,18 @@
     document.getElementById('addModal').style.display = 'flex';
   };
 
-  window.deleteCurrentRecord = async function() {
+window.deleteCurrentRecord = async function() {
     if (!currentUser) {
-      return Swal.fire({
+      await Swal.fire({
         title: 'Film Note',
         text: '로그인이 필요한 서비스입니다.',
         icon: 'warning',
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
+      return;
+    }
+
     if (!activeRecordId) return;
 
     const result = await Swal.fire({
@@ -775,6 +778,7 @@
       confirmButtonColor: '#f2ebd9',
       cancelButtonColor: '#dcd3be'
     });
+    
     if (!result.isConfirmed) return;
 
     try {
@@ -782,7 +786,7 @@
       activeRecordId = null;
     } catch (e) {
       console.error("삭제 실패:", e);
-      Swal.fire({
+      await Swal.fire({
         title: 'Film Note',
         text: '삭제 처리 중 오류가 발생했습니다.',
         icon: 'error',
