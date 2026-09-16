@@ -1134,9 +1134,43 @@ window.deleteCurrentRecord = async function() {
     }
   };
 
-  function renderCalendar() {
+  // 공공데이터포털 특일 정보 API 호출 함수
+  const API_KEY = '8e42e2ef37797a08deaedbcfc1e57ac81cf7a7994bf84799da651595082929cc';
+
+  async function fetchHolidays(year, month) {
+    const formattedMonth = String(month + 1).padStart(2, '0');
+    const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getHoliDeInfo?serviceKey=${API_KEY}&solYear=${year}&solMonth=${formattedMonth}`;
+
+    try {
+      const res = await fetch(url);
+      const xmlText = await res.text();
+       const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+      const items = xmlDoc.getElementsByTagName("item");
+
+      const holidays = [];
+      for (let i = 0; i < items.length; i++) {
+        const isHoliday = items[i].getElementsByTagName("isHoliday")[0]?.textContent;
+        const locdate = items[i].getElementsByTagName("locdate")[0]?.textContent;
+
+        if (isHoliday === "Y" && locdate) {
+          const formattedDate = `${locdate.substring(0, 4)}-${locdate.substring(4, 6)}-${locdate.substring(6, 8)}`;
+          holidays.push(formattedDate);
+        }
+      }
+      return holidays;
+    } catch (e) {
+      console.error('공휴일 API 실패:', e);
+      return [];
+    }
+  }
+  
+  async function renderCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
+
+    // API에서 선거일 포함 공휴일 가져오기
+    const holidayList = await fetchHolidays(year, month);
 
     document.getElementById('calendar-title').innerText = `${year}. ${month + 1}`;
     const grid = document.getElementById('calendar-grid');
@@ -1160,52 +1194,11 @@ window.deleteCurrentRecord = async function() {
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
       const logs = movieLogs.filter(l => l.date === dateStr);
-    // 요일 및 공휴일 판별 (CDN 활용)
+    // 요일 및 공휴일 판별 (API 활용)
       const targetDate = new Date(year, month, date);
       const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
 
-  // 1. KASI 음력 변환 알고리즘 (CDN 없이 브라우저 자체 음력 계산)
-    const getLunarDate = (y, m, d) => {
-    const base = new Date(1900, 0, 31);
-    const target = new Date(y, m - 1, d);
-    let dayDiff = Math.floor((target - base) / (1000 * 60 * 60 * 24));
-    
-    // 음력 월/일 간이 계산 구조 (명절 정밀 판별용)
-    const lunarData = [
-      [2026, 2, 16, 1, 1], [2026, 2, 17, 1, 2], [2026, 5, 24, 4, 8],
-      [2026, 9, 24, 8, 14], [2026, 9, 25, 8, 15], [2026, 9, 26, 8, 16]
-    ];
-    return lunarData.find(item => item[0] === y && item[1] === m && item[2] === d);
-  };
-
-  // 2. 대한민국 관공서 공휴일 법정 규칙 자동 계산 엔진
-    const checkHoliday = (y, m, d) => {
-    const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const day = new Date(y, m - 1, d).getDay(); // 0: 일요일, 6: 토요일
-
-    // [A] 고정 양력 공휴일
-    const fixedHolidays = ['01-01', '03-01', '05-05', '06-06', '08-15', '10-03', '10-09', '12-25'];
-    if (fixedHolidays.includes(mmdd)) return true;
-
-    // [B] 음력 명절 (설날, 추석, 부처님오신날)
-    const lunar = getLunarDate(y, m, d);
-    if (lunar) return true;
-
-    // [C] 대체공휴일 자동 판별 (삼일절, 어린이날, 부처님오신날, 광복절, 개천절, 한글날, 성탄절, 설/추석)
-    // - 주말(토/일)과 겹친 공휴일 다음 첫 번째 비공휴일을 대체공휴일로 지정
-    const yesterday = new Date(y, m - 1, d - 1);
-    const prevMmdd = `${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-    const prevDay = yesterday.getDay();
-
-    // 일요일(0) 또는 토요일(6)이 공휴일이었어서 오늘(월요일)로 밀린 경우
-    if (day === 1 && (prevDay === 0 || prevDay === 6)) {
-      if (['03-01', '05-05', '08-15', '10-03', '10-09', '12-25'].includes(prevMmdd)) return true;
-    }
-
-    return false;
-  };
-
-    let isHoliday = checkHoliday(year, month + 1, date);
+      const isHoliday = holidayList.includes(dateStr);
 
       let dateColorClass = '';
       if (dayOfWeek === 0 || isHoliday) {
