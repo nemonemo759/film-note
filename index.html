@@ -1148,33 +1148,31 @@
 
   renderCalendar();
 
-// 1. 안드로이드 뒤로가기 누를 때 화면에 열려있는 모든 모달/팝업 닫기
+// 1. 안드로이드 뒤로가기 누를 때 가장 위에 있는 모달부터 순서대로 닫기
   window.addEventListener('popstate', function (e) {
-    // SweetAlert2 팝업이 있다면 닫기
     if (typeof Swal !== 'undefined' && Swal.isVisible()) {
       Swal.close();
       return;
     }
 
-    // 화면에 떠 있는 모든 커스텀 모달(.modal-overlay 등) 찾아서 닫기
-    const modals = document.querySelectorAll('.modal-overlay');
-    let modalClosed = false;
-    
-    modals.forEach(modal => {
-      // display가 block이거나 flex 등 화면에 보이는 상태라면
-      if (window.getComputedStyle(modal).display !== 'none') {
-        modal.style.display = 'none';
-        modalClosed = true;
-      }
-    });
-
-    // 닫은 모달이 있었다면, 히스토리가 꼬이지 않도록 현재 상태 유지
-    if (modalClosed) {
+    // ① 포스터 확대 화면(지정한 아이디나 클래스)이 열려있다면 이것부터 닫기!
+    const posterModal = document.getElementById('posterModal');
+    if (posterModal && window.getComputedStyle(posterModal).display !== 'none') {
+      posterModal.style.display = 'none';
       return;
+    }
+
+    // ② 그 외 다른 모달들(.modal-overlay) 중 화면에 보이는 것 찾아서 닫기
+    const modals = document.querySelectorAll('.modal-overlay');
+    for (let i = modals.length - 1; i >= 0; i--) {
+      if (window.getComputedStyle(modals[i]).display !== 'none') {
+        modals[i].style.display = 'none';
+        return;
+      }
     }
   });
 
-  // 2. SweetAlert2 팝업이 열릴 때 자동으로 뒤로가기 히스토리 추가
+  // 2. SweetAlert2 팝업 열릴 때 자동 히스토리 추가
   if (typeof Swal !== 'undefined') {
     const originalFire = Swal.fire;
     Swal.fire = function (...args) {
@@ -1183,22 +1181,25 @@
     };
   }
 
-  // 3. 모달이 열리는 클래스나 함수가 실행될 때 자동으로 히스토리 추가 (공통 가로채기)
+  // 3. 모든 모달(포스터 모달 포함)이 열릴 때 자동으로 히스토리 추가
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
-      if (mutation.target.classList && mutation.target.classList.contains('modal-overlay')) {
-        const isVisible = window.getComputedStyle(mutation.target).display !== 'none';
-        // 모달이 열리는 순간(display가 block/flex로 바뀔 때) 히스토리 추가
-        if (isVisible && location.hash !== '#modal') {
+      const target = mutation.target;
+      if (target.id === 'posterModal' || (target.classList && target.classList.contains('modal-overlay'))) {
+        const isVisible = window.getComputedStyle(target).display !== 'none';
+        if (isVisible) {
           history.pushState({ modal: true }, '', '#modal');
         }
       }
     });
   });
 
-  // 문서 전체에서 모달들의 상태 변화 감시 시작
-  document.querySelectorAll('.modal-overlay').forEach(modal => {
-    observer.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
+  // 포스터 모달과 일반 모달들 모두 감시 대상에 등록
+  const allModals = document.querySelectorAll('.modal-overlay, #posterModal');
+  allModals.forEach(modal => {
+    if (modal) {
+      observer.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
+    }
   });
 </script>
 </body>
