@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://cdn.jsdelivr.net/npm/holidays-kr@latest/dist/umd/index.bundle.js"></script>
+  <script src="https://unpkg.com/holidays-kr@latest/dist/index.umd.js"></script>
   
   <style>
     * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -1164,7 +1164,13 @@ window.deleteCurrentRecord = async function() {
       // 요일 및 공휴일 판별 (CDN 활용)
       const targetDate = new Date(year, month, date);
       const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
-      const isHoliday = HolidaysKr.isHoliday(targetDate);
+    // 기존 코드
+    // const isHoliday = HolidaysKr.isHoliday(targetDate);
+
+    // 수정 코드 (HolidaysKr가 없으면 에러 내지 않고 false 처리)
+      const isHoliday = (typeof HolidaysKr !== 'undefined' && HolidaysKr.isHoliday) 
+        ? HolidaysKr.isHoliday(targetDate) 
+        : false;
 
       let dateColorClass = '';
       if (dayOfWeek === 0 || isHoliday) {
