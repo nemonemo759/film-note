@@ -1161,16 +1161,18 @@ window.deleteCurrentRecord = async function() {
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
       const logs = movieLogs.filter(l => l.date === dateStr);
-      // 요일 및 공휴일 판별 (CDN 활용)
+    // 요일 및 공휴일 판별 (CDN 활용)
       const targetDate = new Date(year, month, date);
       const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
-    // 기존 코드
-    // const isHoliday = HolidaysKr.isHoliday(targetDate);
 
-    // 수정 코드 (HolidaysKr가 없으면 에러 내지 않고 false 처리)
-      const isHoliday = (typeof HolidaysKr !== 'undefined' && HolidaysKr.isHoliday) 
-        ? HolidaysKr.isHoliday(targetDate) 
-        : false;
+      let isHoliday = false;
+        if (typeof HolidaysKr !== 'undefined' && typeof HolidaysKr.isHoliday === 'function') {
+          try {
+            isHoliday = HolidaysKr.isHoliday(targetDate) || HolidaysKr.isHoliday(year, month + 1, date);
+          } catch (e) {
+            isHoliday = false;
+          }
+       }
 
       let dateColorClass = '';
       if (dayOfWeek === 0 || isHoliday) {
