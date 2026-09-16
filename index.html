@@ -202,20 +202,21 @@
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
 
-    /* 클릭 시 포스터를 화면 꽉 차게 확대하는 모달 */
+    /* 수정: 클릭 시 포스터 화면 중앙 정렬 및 여백 보정 모달 */
     .poster-modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0, 0, 0, 0.92); backdrop-filter: blur(8px);
-      z-index: 3000; justify-content: center; align-items: center; padding: 10px;
-      cursor: zoom-out;
+      z-index: 3000; justify-content: center; align-items: center; padding: 0;
+      margin: 0; cursor: zoom-out;
     }
     .poster-modal-img {
+      max-width: 90vw; max-height: 90vh;
       width: auto; height: auto;
-      max-width: 95vw; max-height: 95vh;
-      border-radius: 6px;
+      border-radius: 8px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.8);
       object-fit: contain;
       image-rendering: -webkit-optimize-contrast;
+      margin: auto; display: block;
     }
   </style>
 </head>
@@ -502,12 +503,10 @@
     ['listModal', 'detailModal', 'addModal', 'posterModal'].forEach(id => window.closeModal(id));
   };
 
-  // 포스터 클릭 시 최대로 확대 팝업 오픈
   window.openPosterModal = function() {
     let currentPosterSrc = document.getElementById('detailPoster').src;
     if (!currentPosterSrc || currentPosterSrc.includes('No+Poster')) return;
 
-    // TMDB URL일 경우 확대시 최고 화질(original)로 스위칭
     if (currentPosterSrc.includes('image.tmdb.org')) {
       currentPosterSrc = currentPosterSrc.replace(/\/t\/p\/w\d+/, '/t/p/original');
     }
@@ -786,6 +785,7 @@
     }
   }
 
+  /* 수정: 개봉연도를 추출하여 TMDB primary_release_year/year 검색 및 연도 일치도 비교 정밀 매칭 */
   window.selectMovie = async function(movieNm, prodYear, openDt, director, movieCd) {
     document.getElementById('movieTitle').value = movieNm;
     hideAutoComplete();
@@ -796,6 +796,13 @@
 
     let actors = '정보 없음';
     let posterUrl = DEFAULT_POSTER;
+
+    // KOFIC에서 추출한 개봉 연도 파싱
+    let targetYear = prodYear || '';
+    if (openDt && openDt !== '정보 없음') {
+      const yearMatch = openDt.match(/^\d{4}/);
+      if (yearMatch) targetYear = yearMatch[0];
+    }
 
     await Promise.all([
       (async () => {
@@ -815,14 +822,31 @@
 
       (async () => {
         try {
-          const tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
-          const res = await fetch(tmdbUrl);
-          const data = await res.json();
+          // 개봉연도가 있으면 TMDB 파라미터(primary_release_year 및 year)에 함께 조율
+          let yearParam = targetYear ? `&primary_release_year=${targetYear}&year=${targetYear}` : '';
+          let tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}${yearParam}`;
+          let res = await fetch(tmdbUrl);
+          let data = await res.json();
+
+          // 연도 조건 검색 결과가 없으면 일반 검색 fallback
+          if ((!data.results || data.results.length === 0) && yearParam) {
+            tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
+            res = await fetch(tmdbUrl);
+            data = await res.json();
+          }
+
           if (data.results && data.results.length > 0) {
-            const validResult = data.results.find(r => r.poster_path) || data.results[0];
-            if (validResult && validResult.poster_path) {
-              // TMDB 고화질 이미지 매핑
-              posterUrl = `https://image.tmdb.org/t/p/w780${validResult.poster_path}`;
+            let matchedResult = null;
+            if (targetYear) {
+              // 검색된 결과 중 release_date의 연도가 KOFIC 개봉연도와 정확히 매칭되는 1순위 항목 탐색
+              matchedResult = data.results.find(r => r.poster_path && r.release_date && r.release_date.startsWith(targetYear));
+            }
+            if (!matchedResult) {
+              matchedResult = data.results.find(r => r.poster_path) || data.results[0];
+            }
+
+            if (matchedResult && matchedResult.poster_path) {
+              posterUrl = `https://image.tmdb.org/t/p/w780${matchedResult.poster_path}`;
             }
           }
         } catch (e) {
