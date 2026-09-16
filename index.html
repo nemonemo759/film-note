@@ -1147,6 +1147,32 @@
   });
 
   renderCalendar();
+
+// 안드로이드 뒤로가기 감시 및 팝업 닫기 공통 처리
+window.addEventListener('popstate', function (e) {
+  // 1. SweetAlert2 팝업이 떠 있다면 팝업만 닫기
+  if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+    Swal.close();
+    return;
+  }
+
+  // 2. 포스터 상세 모달이 열려 있다면 모달만 닫기
+  const posterModal = document.getElementById('posterModal');
+  if (posterModal && (posterModal.style.display === 'block' || posterModal.classList.contains('active'))) {
+    posterModal.style.display = 'none';
+    posterModal.classList.remove('active');
+    return;
+  }
+});
+
+// SweetAlert2 실행 시 자동으로 뒤로가기 이력 생성
+if (typeof Swal !== 'undefined') {
+  const originalFire = Swal.fire;
+  Swal.fire = function (...args) {
+    history.pushState({ swal: true }, '', '#popup');
+    return originalFire.apply(this, args);
+  };
+}
 </script>
 </body>
 </html>
