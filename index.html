@@ -770,13 +770,13 @@ window.deleteCurrentRecord = async function() {
 
     const result = await Swal.fire({
       title: 'Film Note',
-      text: '이 관람 기록을 정말 삭제하시겠습니까?',
+      html: '이 관람 기록을<br>정말 삭제하시겠습니까?',
       icon: 'question',
       showCancelButton: true,
       confirmButtonText: '삭제',
       cancelButtonText: '취소',
       confirmButtonColor: '#f2ebd9',
-      cancelButtonColor: '#dcd3be'
+      cancelButtonColor: '#e9ecef'
     });
     
     if (!result.isConfirmed) return;
