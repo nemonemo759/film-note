@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FILM NOTE - 관람 기록</title>
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   
   <style>
     * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -411,7 +412,7 @@
 
   const firebaseConfig = {
     apiKey: "AIzaSyCSPiOoFvq4zJe_U1HyFlHZHeLs1pHFeW8",
-    authDomain: "film-note-7139b.firebaseapp.com",
+    authDomain: "nemonemo759.github.io",
     projectId: "film-note-7139b",
     storageBucket: "film-note-7139b.firebasestorage.app",
     messagingSenderId: "915603733331",
@@ -543,7 +544,13 @@
 
   window.handleDateClick = function(dateStr) {
     if (!currentUser) {
-      alert('로그인이 필요한 서비스입니다.');
+      Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요한 서비스입니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
       return;
     }
 
