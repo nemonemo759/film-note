@@ -202,7 +202,6 @@
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
 
-    /* 수정: 클릭 시 포스터 화면 중앙 정렬 및 여백 보정 모달 */
     .poster-modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0, 0, 0, 0.92); backdrop-filter: blur(8px);
@@ -785,7 +784,6 @@
     }
   }
 
-  /* 수정: 개봉연도를 추출하여 TMDB primary_release_year/year 검색 및 연도 일치도 비교 정밀 매칭 */
   window.selectMovie = async function(movieNm, prodYear, openDt, director, movieCd) {
     document.getElementById('movieTitle').value = movieNm;
     hideAutoComplete();
@@ -797,7 +795,6 @@
     let actors = '정보 없음';
     let posterUrl = DEFAULT_POSTER;
 
-    // KOFIC에서 추출한 개봉 연도 파싱
     let targetYear = prodYear || '';
     if (openDt && openDt !== '정보 없음') {
       const yearMatch = openDt.match(/^\d{4}/);
@@ -822,13 +819,11 @@
 
       (async () => {
         try {
-          // 개봉연도가 있으면 TMDB 파라미터(primary_release_year 및 year)에 함께 조율
           let yearParam = targetYear ? `&primary_release_year=${targetYear}&year=${targetYear}` : '';
           let tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}${yearParam}`;
           let res = await fetch(tmdbUrl);
           let data = await res.json();
 
-          // 연도 조건 검색 결과가 없으면 일반 검색 fallback
           if ((!data.results || data.results.length === 0) && yearParam) {
             tmdbUrl = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_KEY}&language=ko-KR&query=${encodeURIComponent(movieNm)}`;
             res = await fetch(tmdbUrl);
@@ -838,7 +833,6 @@
           if (data.results && data.results.length > 0) {
             let matchedResult = null;
             if (targetYear) {
-              // 검색된 결과 중 release_date의 연도가 KOFIC 개봉연도와 정확히 매칭되는 1순위 항목 탐색
               matchedResult = data.results.find(r => r.poster_path && r.release_date && r.release_date.startsWith(targetYear));
             }
             if (!matchedResult) {
