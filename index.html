@@ -129,7 +129,12 @@
     }
 
     .detail-container { text-align: center; }
-    .detail-poster { width: 150px; height: 215px; object-fit: cover; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 14px; background-color: #eee; }
+    .detail-poster { 
+      width: 150px; height: 215px; object-fit: cover; border-radius: 12px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 14px; background-color: #eee; 
+      cursor: pointer; transition: transform 0.2s, opacity 0.2s;
+    }
+    .detail-poster:hover { opacity: 0.9; transform: scale(1.02); }
     .detail-title { font-size: 1.2rem; font-weight: 800; color: #222; margin-bottom: 14px; }
     
     .detail-card {
@@ -196,6 +201,17 @@
     .time-colon { font-weight: 700; color: #777; margin: 0 2px; user-select: none; }
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
+
+    /* 포스터 크게보기 팝업 모달 스타일 */
+    .poster-modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
+      z-index: 2000; justify-content: center; align-items: center; padding: 20px;
+    }
+    .poster-modal-img {
+      max-width: 90%; max-height: 85vh; border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5); object-fit: contain; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -251,7 +267,7 @@
       <button class="close-btn" onclick="window.closeModal('detailModal')">&times;</button>
     </div>
     <div class="detail-container">
-      <img id="detailPoster" src="" class="detail-poster" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x215/dcd3be/ffffff?text=No+Poster';">
+      <img id="detailPoster" src="" class="detail-poster" onclick="window.openPosterModal()" onerror="this.onerror=null; this.src='https://via.placeholder.com/150x215/dcd3be/ffffff?text=No+Poster';">
       <div id="detailTitle" class="detail-title">영화 제목</div>
       
       <button id="btnMainPoster" class="btn-main-poster" onclick="window.toggleMainPoster()">★ 캘린더 대표 포스터로 지정</button>
@@ -350,6 +366,11 @@
     </div>
     <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
   </div>
+</div>
+
+<!-- 포스터 크게보기 모달 -->
+<div class="poster-modal-overlay" id="posterModal" onclick="window.closeModal('posterModal')">
+  <img id="enlargedPoster" src="" class="poster-modal-img" alt="Enlarged Poster">
 </div>
 
 <script type="module">
@@ -475,7 +496,16 @@
   };
 
   window.closeAllModals = function() {
-    ['listModal', 'detailModal', 'addModal'].forEach(id => window.closeModal(id));
+    ['listModal', 'detailModal', 'addModal', 'posterModal'].forEach(id => window.closeModal(id));
+  };
+
+  // 포스터 크게보기 함수
+  window.openPosterModal = function() {
+    const currentPosterSrc = document.getElementById('detailPoster').src;
+    if (!currentPosterSrc || currentPosterSrc.includes('No+Poster')) return;
+
+    document.getElementById('enlargedPoster').src = currentPosterSrc;
+    document.getElementById('posterModal').style.display = 'flex';
   };
 
   window.handleDateClick = function(dateStr) {
