@@ -693,7 +693,13 @@
       }
     } catch (e) {
       console.error("대표 포스터 설정 오류:", e);
-      alert("대표 포스터 설정 중 오류가 발생했습니다.");
+      Swal.fire({
+        title: 'Film Note',
+        text: '대표 포스터 설정 중 오류가 발생했습니다.',
+        icon: 'error',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
     }
   };
 
@@ -1093,7 +1099,13 @@
       }
     } catch (e) {
       console.error("저장 중 오류 발생:", e);
-      alert("저장 과정에서 오류가 발생했습니다.");
+      Swal.fire({
+        title: 'Film Note',
+        text: '저장 과정에서 오류가 발생했습니다.',
+        icon: 'error',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
     } finally {
       isSaving = false;
       if (saveBtn) saveBtn.innerText = editId ? '기록 수정하기' : '기록 저장하기';
