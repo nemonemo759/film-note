@@ -749,23 +749,55 @@
   };
 
   window.deleteCurrentRecord = async function() {
-    if (!currentUser) return alert('로그인이 필요합니다.');
+    if (!currentUser) {
+      return Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요한 서비스입니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
     if (!activeRecordId) return;
-    if (!confirm('이 관람 기록을 정말 삭제하시겠습니까?')) return;
+
+    const result = await Swal.fire({
+      title: 'Film Note',
+      text: '이 관람 기록을 정말 삭제하시겠습니까?",
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      confirmButtonColor: '#f2ebd9',
+      cancelButtonColor: '#dcd3be'
+    });
+    if (!result.isConfirmed) return;
 
     try {
       await deleteDoc(doc(db, "movieLogs", activeRecordId));
       activeRecordId = null;
     } catch (e) {
       console.error("삭제 실패:", e);
-      alert("삭제 처리 중 오류가 발생했습니다.");
+      Swal.fire({
+        title: 'Film Note',
+        text: '삭제 처리 중 오류가 발생했습니다.',
+        icon: 'error',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
     } finally {
       window.closeAllModals();
     }
   };
 
   window.openAddModal = function(dateStr) {
-    if (!currentUser) return alert('로그인이 필요한 서비스입니다.');
+    if (!currentUser) [
+      return Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요한 서비스입니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
 
     document.getElementById('addModalTitle').innerText = `${dateStr} 기록 추가`;
     document.getElementById('saveBtn').innerText = '기록 저장하기';
