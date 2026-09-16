@@ -128,14 +128,13 @@
       padding: 2px 6px; border-radius: 4px;
     }
 
-    /* 상세 모달 내 포스터 대폭 확대 */
     .detail-container { text-align: center; }
     .detail-poster { 
-      width: 100%; max-width: 250px; height: auto; aspect-ratio: 1 / 1.45; object-fit: cover; border-radius: 14px; 
-      box-shadow: 0 6px 18px rgba(0,0,0,0.2); margin: 0 auto 16px auto; background-color: #eee; 
+      width: 140px; height: 200px; object-fit: cover; border-radius: 12px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin: 0 auto 14px auto; background-color: #eee; 
       cursor: pointer; transition: transform 0.2s, opacity 0.2s; display: block;
     }
-    .detail-poster:hover { opacity: 0.92; transform: scale(1.02); }
+    .detail-poster:hover { opacity: 0.9; transform: scale(1.03); }
     .detail-title { font-size: 1.25rem; font-weight: 800; color: #222; margin-bottom: 14px; }
     
     .detail-card {
@@ -203,15 +202,20 @@
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
 
-    /* 클릭 시 화면을 꽉 채우는 초고화질 팝업 모달 */
+    /* 클릭 시 포스터를 화면 꽉 차게 확대하는 모달 */
     .poster-modal-overlay {
-      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(0, 0, 0, 0.92); backdrop-filter: blur(8px);
-      z-index: 2000; justify-content: center; align-items: center; padding: 10px;
+      z-index: 3000; justify-content: center; align-items: center; padding: 10px;
+      cursor: zoom-out;
     }
     .poster-modal-img {
-      max-width: 96vw; max-height: 94vh; border-radius: 8px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.9); object-fit: contain; cursor: pointer;
+      width: auto; height: auto;
+      max-width: 95vw; max-height: 95vh;
+      border-radius: 6px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
     }
   </style>
 </head>
@@ -361,14 +365,14 @@
       <input type="text" class="input-box" id="duration" readonly placeholder="시간 입력 시 자동 계산됨" style="background:#f9f9f9;">
     </div>
     <div class="form-group">
-      <label>검색된 메타 정보 (TMDB 고화질 연동)</label>
+      <label>검색된 메타 정보 (TMDB 연동)</label>
       <input type="text" class="input-box" id="movieMetaPreview" readonly placeholder="영화 선택 시 정보 표시됨" style="background:#f9f9f9;">
     </div>
     <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
   </div>
 </div>
 
-<!-- 포스터 크게보기 모달 -->
+<!-- 포스터 화면 전체 확대보기 모달 -->
 <div class="poster-modal-overlay" id="posterModal" onclick="window.closeModal('posterModal')">
   <img id="enlargedPoster" src="" class="poster-modal-img" alt="Enlarged Poster">
 </div>
@@ -498,11 +502,18 @@
     ['listModal', 'detailModal', 'addModal', 'posterModal'].forEach(id => window.closeModal(id));
   };
 
+  // 포스터 클릭 시 최대로 확대 팝업 오픈
   window.openPosterModal = function() {
-    const currentPosterSrc = document.getElementById('detailPoster').src;
+    let currentPosterSrc = document.getElementById('detailPoster').src;
     if (!currentPosterSrc || currentPosterSrc.includes('No+Poster')) return;
 
-    document.getElementById('enlargedPoster').src = currentPosterSrc;
+    // TMDB URL일 경우 확대시 최고 화질(original)로 스위칭
+    if (currentPosterSrc.includes('image.tmdb.org')) {
+      currentPosterSrc = currentPosterSrc.replace(/\/t\/p\/w\d+/, '/t/p/original');
+    }
+
+    const enlargedImg = document.getElementById('enlargedPoster');
+    enlargedImg.src = currentPosterSrc;
     document.getElementById('posterModal').style.display = 'flex';
   };
 
@@ -810,7 +821,7 @@
           if (data.results && data.results.length > 0) {
             const validResult = data.results.find(r => r.poster_path) || data.results[0];
             if (validResult && validResult.poster_path) {
-              // TMDB 최적화 고화질 이미지 URL 매핑 (w780 규격)
+              // TMDB 고화질 이미지 매핑
               posterUrl = `https://image.tmdb.org/t/p/w780${validResult.poster_path}`;
             }
           }
