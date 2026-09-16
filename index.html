@@ -826,9 +826,12 @@
 
     // [수정점 2] 아비정전 등 리마스터 영화 수거를 위한 영화 제목 정제함수
     const cleanMovieTitle = (title) => {
+      if (!title) return '';
       return title
-        .replace(/\[.*?\]|\(.*?\)/g, '') // [리마스터ing], (1990) 등 괄호 제거
-        .replace(/리마스터|디지털|감독판|무삭제판|확장판|4K|3D/gi, '') // 수식어 제거
+        .replace(/\[.*?\]|\(.*?\)/g, '') // 괄호 포함 내용 제거
+        .replace(/4k|3d|2d|리마스터링|리마스터|remastered|remastering|디지털|감독판|무삭제판|확장판|재개봉/gi, '') // 수식어 단어 직접 제거
+        .replace(/[^a-zA-Z0-9가-힣\s]/g, '') // 특수문자 제거
+        .replace(/\s+/g, ' ') // 연속된 공백 정리
         .trim();
     };
 
