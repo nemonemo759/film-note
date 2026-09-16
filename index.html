@@ -993,11 +993,27 @@
   }
 
   window.saveRecord = async function() {
-    if (!currentUser) return alert('로그인이 필요합니다.');
+    if (!currentUser) {
+      return Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요합니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
     if (isSaving) return;
 
     const title = document.getElementById('movieTitle').value.trim();
-    if (!title) return alert('영화 제목을 입력하세요.');
+    if (!title) {
+      return Swal.fire({
+        title: 'Film Note',
+        text: '영화 제목을 입력하세요.',
+        icon: 'info',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
 
     const editId = document.getElementById('editRecordId').value;
     const date = document.getElementById('selectedDate').value;
