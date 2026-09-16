@@ -240,6 +240,16 @@
     margin: auto; 
     display: block;
   }
+
+  .swal2-icon {
+    transform: scale(0.6) !important;
+    margin: 10px auto -10px !important;
+  }
+  
+  .swal2-confirm {
+    color: #333 !important;
+    font-weight: bold !important;
+  }
   </style>
 </head>
 <body>
@@ -456,11 +466,25 @@
 
   window.handleAuth = function() {
     if (currentUser) {
-      signOut(auth).then(() => alert("로그아웃 되었습니다.")).catch(console.error);
+      signOut(auth).then(() => {
+        Swal.fire({
+          title: 'Film Note',
+          text: '로그아웃 되었습니다.'
+          icon: 'success',
+          confirmButtonText: '확인',
+          confirmButtonColor: '#f2ebd9'
+        });
+    }).catch(console.error);
     } else {
       signInWithPopup(auth, provider).catch(err => {
         console.error("로그인 실패:", err);
-        alert(`구글 로그인에 실패했습니다.\n사유: ${err.message}`);
+        Swal.fire({
+          title: 'Film Note',
+          text: `로그인에 실패했습니다.\n사유: ${err.message}`,
+          icon: 'error',
+          confirmButtonText: '확인',
+          confirmButtonColor: '#f2ebd9'
+        });
       });
     }
   };
@@ -548,6 +572,7 @@
         title: 'Film Note',
         text: '로그인이 필요한 서비스입니다.',
         icon: 'warning',
+        width: '320px',
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
