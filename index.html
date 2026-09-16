@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="https://unpkg.com/holidays-kr@0.0.4/dist/index.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/holidays-kr@0.0.4/dist/index.umd.js"></script>
   
   <style>
     * { box-sizing: border-box; font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -1166,13 +1166,11 @@ window.deleteCurrentRecord = async function() {
       const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
 
       let isHoliday = false;
-        if (typeof HolidaysKr !== 'undefined' && typeof HolidaysKr.isHoliday === 'function') {
-          try {
-            isHoliday = HolidaysKr.isHoliday(targetDate) || HolidaysKr.isHoliday(year, month + 1, date);
-          } catch (e) {
-            isHoliday = false;
-          }
-       }
+      if (typeof HolidaysKr !== 'undefined') {
+       try {
+        isHoliday = HolidaysKr.isHoliday(dateStr);
+      } catch (e) { isHoliday = false; }
+      }
 
       let dateColorClass = '';
       if (dayOfWeek === 0 || isHoliday) {
