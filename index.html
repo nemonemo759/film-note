@@ -241,15 +241,27 @@
     display: block;
   }
 
+  /* 1. 아이콘 크기 줄이기 (유지) */
   .swal2-icon {
     transform: scale(0.6) !important;
     margin: 10px auto -10px !important;
   }
-  
+
+  /* 2. 확인 버튼 글자색 (유지) */
   .swal2-confirm {
     color: #333 !important;
     font-weight: bold !important;
   }
+
+  /* 3. 팝업 창 전체 크기 줄이기 (추가) */
+  .swal2-popup {
+    width: 290px !important;
+    padding: 12px !important;
+    border-radius: 18px !important;
+    font-size: 14px !important;
+  }
+  .swal2-popup .swal2-title { font-size: 16px !important; margin: 5px 0 !important; }
+  .swal2-popup .swal2-actions { margin-top: 8px !important; }
   </style>
 </head>
 <body>
@@ -572,7 +584,6 @@
         title: 'Film Note',
         text: '로그인이 필요한 서비스입니다.',
         icon: 'warning',
-        width: '320px',
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
