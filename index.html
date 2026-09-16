@@ -1148,31 +1148,39 @@
 
   renderCalendar();
 
-// 안드로이드 뒤로가기 감시 및 팝업 닫기 공통 처리
-window.addEventListener('popstate', function (e) {
-  // 1. SweetAlert2 팝업이 떠 있다면 팝업만 닫기
-  if (typeof Swal !== 'undefined' && Swal.isVisible()) {
-    Swal.close();
-    return;
+// 1. 안드로이드 뒤로가기 누를 때 모달이나 팝업 닫기
+  window.addEventListener('popstate', function (e) {
+    if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+      Swal.close();
+      return;
+    }
+    // 열려있는 커스텀 모달이 있다면 닫기
+    const modals = document.querySelectorAll('.modal-overlay');
+    for (let m of modals) {
+      if (m.style.display === 'flex' || m.style.display === 'block') {
+        m.style.display = 'none';
+        return;
+      }
+    }
+  });
+
+  // 2. SweetAlert2 팝업 열릴 때 자동 히스토리 추가
+  if (typeof Swal !== 'undefined') {
+    const originalFire = Swal.fire;
+    Swal.fire = function (...args) {
+      history.pushState({ swal: true }, '', '#popup');
+      return originalFire.apply(this, args);
+    };
   }
 
-  // 2. 포스터 상세 모달이 열려 있다면 모달만 닫기
-  const posterModal = document.getElementById('posterModal');
-  if (posterModal && (posterModal.style.display === 'block' || posterModal.classList.contains('active'))) {
-    posterModal.style.display = 'none';
-    posterModal.classList.remove('active');
-    return;
+  // 3. window.openModal 실행될 때 자동으로 히스토리 추가
+  if (typeof window.openModal !== 'undefined') {
+    const originalOpen = window.openModal;
+    window.openModal = function (...args) {
+      history.pushState({ modal: true }, '', '#modal');
+      return originalOpen.apply(this, args);
+    };
   }
-});
-
-// SweetAlert2 실행 시 자동으로 뒤로가기 이력 생성
-if (typeof Swal !== 'undefined') {
-  const originalFire = Swal.fire;
-  Swal.fire = function (...args) {
-    history.pushState({ swal: true }, '', '#popup');
-    return originalFire.apply(this, args);
-  };
-}
 </script>
 </body>
 </html>
