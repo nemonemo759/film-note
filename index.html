@@ -375,15 +375,15 @@
       <label>상영 시간 (24시간제)</label>
       <div style="display: flex; gap: 8px; align-items: center;">
         <div class="time-picker-box">
-          <input type="text" id="startH" class="time-num-input" placeholder="23" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'startM')">
+          <input type="text" id="startH" class="time-num-input" placeholder="12" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'startM')">
           <span class="time-colon">:</span>
-          <input type="text" id="startM" class="time-num-input" placeholder="50" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endH')">
+          <input type="text" id="startM" class="time-num-input" placeholder="00" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endH')">
         </div>
         <span>~</span>
         <div class="time-picker-box">
-          <input type="text" id="endH" class="time-num-input" placeholder="25" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endM')">
+          <input type="text" id="endH" class="time-num-input" placeholder="14" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, 'endM')">
           <span class="time-colon">:</span>
-          <input type="text" id="endM" class="time-num-input" placeholder="12" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, null)">
+          <input type="text" id="endM" class="time-num-input" placeholder="00" maxlength="2" autocomplete="off" oninput="window.handleTimeInput(this, null)">
         </div>
       </div>
     </div>
