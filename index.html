@@ -202,15 +202,15 @@
 
     .btn-submit { width: 100%; padding: 12px; background-color: #2b2b2b; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; margin-top: 8px; font-size: 0.9rem; }
 
-    /* 포스터 크게보기 팝업 모달 스타일 */
+    /* 포스터 크게보기 팝업 모달 스타일 (고화질 및 대형 사이즈로 개선) */
     .poster-modal-overlay {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
-      z-index: 2000; justify-content: center; align-items: center; padding: 20px;
+      background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px);
+      z-index: 2000; justify-content: center; align-items: center; padding: 10px;
     }
     .poster-modal-img {
-      max-width: 90%; max-height: 85vh; border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5); object-fit: contain; cursor: pointer;
+      max-width: 95vw; max-height: 92vh; border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8); object-fit: contain; cursor: pointer;
     }
   </style>
 </head>
@@ -361,7 +361,7 @@
       <input type="text" class="input-box" id="duration" readonly placeholder="시간 입력 시 자동 계산됨" style="background:#f9f9f9;">
     </div>
     <div class="form-group">
-      <label>검색된 메타 정보 (TMDB 포스터 연동)</label>
+      <label>검색된 메타 정보 (TMDB 고화질 연동)</label>
       <input type="text" class="input-box" id="movieMetaPreview" readonly placeholder="영화 선택 시 정보 표시됨" style="background:#f9f9f9;">
     </div>
     <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
@@ -468,7 +468,6 @@
     }
   });
 
-  // 상영 시작시간 정렬용 유틸리티 함수
   function sortLogsByTime(logs) {
     return [...logs].sort((a, b) => {
       const timeA = a.startTime || '99:99';
@@ -499,7 +498,6 @@
     ['listModal', 'detailModal', 'addModal', 'posterModal'].forEach(id => window.closeModal(id));
   };
 
-  // 포스터 크게보기 함수
   window.openPosterModal = function() {
     const currentPosterSrc = document.getElementById('detailPoster').src;
     if (!currentPosterSrc || currentPosterSrc.includes('No+Poster')) return;
@@ -529,7 +527,6 @@
     const container = document.getElementById('movieListContainer');
     container.innerHTML = '';
 
-    // 상영 시작 시간 순으로 정렬
     const sortedLogs = sortLogsByTime(logs);
 
     sortedLogs.forEach(log => {
@@ -813,7 +810,8 @@
           if (data.results && data.results.length > 0) {
             const validResult = data.results.find(r => r.poster_path) || data.results[0];
             if (validResult && validResult.poster_path) {
-              posterUrl = `https://image.tmdb.org/t/p/w500${validResult.poster_path}`;
+              // TMDB 최상위 원본 고화질 이미지 URL 사용 (w500 -> original)
+              posterUrl = `https://image.tmdb.org/t/p/original${validResult.poster_path}`;
             }
           }
         } catch (e) {
@@ -949,17 +947,15 @@
       monthLogCount += logs.length;
 
       logs.forEach(l => {
-        // 비용 계산
         monthlyTotalCost += Number(l.ticketPrice || 0);
 
-        // 시간(분) 합산 계산
         if (l.startTime && l.endTime) {
           const [sH, sM] = l.startTime.split(':').map(Number);
           const [eH, eM] = l.endTime.split(':').map(Number);
           if (!isNaN(sH) && !isNaN(eH)) {
             const startMins = sH * 60 + (sM || 0);
             let endMins = eH * 60 + (eM || 0);
-            if (endMins < startMins) endMins += 24 * 60; // 자정 심야 영화 처리
+            if (endMins < startMins) endMins += 24 * 60;
             const diff = endMins - startMins;
             if (diff > 0) monthlyTotalMinutes += diff;
           }
@@ -994,15 +990,12 @@
       `;
     }
 
-    // 1. 총 비용 표기
     document.getElementById('monthlyTotalCost').innerText = monthlyTotalCost.toLocaleString();
 
-    // 2. 총 시간 표기 (포맷팅)
     const hours = Math.floor(monthlyTotalMinutes / 60);
     const mins = monthlyTotalMinutes % 60;
     document.getElementById('monthlyTotalTime').innerText = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
 
-    // 3. 상단 안내 문구
     const summaryText = document.getElementById('month-summary');
     if (!currentUser) {
       summaryText.innerText = '로그인하면 관람 기록을 볼 수 있어요.';
