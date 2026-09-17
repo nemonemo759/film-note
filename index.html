@@ -441,8 +441,8 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { 
-    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch,
-    enableIndexedDbPersistence
+    initializeFirestore, persistentLocalCache, persistentSingleTabManager,
+    collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
   import { 
     getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
@@ -458,12 +458,12 @@
   };
 
   const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
 
   // 오프라인(IndexedDB) 캐시 활성화: 재방문 시 서버 응답을 기다리지 않고
   // 로컬에 저장된 movieLogs를 즉시 보여준 뒤, 백그라운드에서 최신 데이터로 동기화함
-  enableIndexedDbPersistence(db).catch((err) => {
-    console.warn('오프라인 캐시 비활성화됨:', err.code);
+  // (구버전 enableIndexedDbPersistence 대신 최신 방식인 localCache 옵션 사용)
+  const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) })
   });
 
   const auth = getAuth(app);
