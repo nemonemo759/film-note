@@ -96,6 +96,87 @@
       z-index: 2;
     }
 
+    /* ===================== 날짜 드래그 이동 ===================== */
+    .day-cell {
+      -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    }
+    .day-cell.draggable-day { cursor: grab; }
+    body.dnd-active { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+    body.dnd-active .day-cell:hover { transform: none; border-color: #eee8dc; }
+
+    .day-cell.drag-source { opacity: 0.32; filter: grayscale(0.5); }
+    .day-cell.drag-over {
+      border: 2px dashed #b58d53 !important;
+      box-shadow: 0 0 0 3px rgba(181, 141, 83, 0.22);
+      transform: scale(1.05);
+      z-index: 3;
+    }
+
+    .drag-ghost {
+      position: fixed; z-index: 99999; pointer-events: none;
+      width: 64px; aspect-ratio: 1 / 1.35;
+      border-radius: 10px; border: 2px solid #fff;
+      background-color: #e8e2d5; background-size: cover; background-position: center center;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.32);
+      transform: translate(-50%, -50%) rotate(-4deg) scale(1.06);
+      opacity: 0.93;
+    }
+    .drag-ghost-count {
+      position: absolute; bottom: -7px; right: -7px;
+      background-color: #e64980; color: #fff;
+      font-size: 0.7rem; font-weight: 800;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .btn-circle.drag-hot {
+      background: #b58d53 !important; color: #fff !important; border-color: #b58d53 !important;
+    }
+
+    /* 여러 기록 중 옮길 것 고르는 팝업 */
+    .move-pick-popup { width: 340px !important; }
+    .move-pick-desc {
+      font-size: 0.82rem; color: #8e8370; line-height: 1.55; margin: 2px 0 10px;
+    }
+    .move-pick-desc b { color: #b58d53; }
+    .move-pick-list { max-height: 42vh; overflow-y: auto; text-align: left; padding: 2px; }
+    .move-pick-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 8px; margin-bottom: 6px;
+      border: 1px solid #eee8dc; border-radius: 10px; background: #fff;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    }
+    .move-pick-item:hover, .move-pick-item:active { background: #faf6ec; border-color: #cbb898; }
+    .move-pick-item.selected { background: #f7f1e2; border-color: #b58d53; }
+    .move-pick-item img { width: 34px; height: 48px; object-fit: cover; border-radius: 5px; flex-shrink: 0; }
+    .move-pick-title { font-size: 0.85rem; font-weight: 700; color: #333; }
+    .move-pick-sub { font-size: 0.72rem; color: #8e8370; margin-top: 3px; }
+    .move-pick-body { flex: 1; min-width: 0; }
+    .move-pick-title, .move-pick-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* 체크박스 (여러 개 동시에 고를 수 있게) */
+    .move-pick-check {
+      width: 20px; height: 20px; flex-shrink: 0;
+      border-radius: 6px; border: 2px solid #dcd3be; background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      color: transparent; font-size: 12px; font-weight: 900;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .move-pick-item.selected .move-pick-check {
+      background: #b58d53; border-color: #b58d53; color: #fff;
+    }
+    .move-pick-selectall {
+      display: flex; justify-content: flex-end; margin-bottom: 6px;
+    }
+    .move-pick-selectall button {
+      background: none; border: none; padding: 2px 4px; cursor: pointer;
+      font-size: 0.74rem; font-weight: 700; color: #b58d53; text-decoration: underline;
+    }
+    .swal2-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .summary-highlight { color: #b58d53; font-weight: 800; }
+    .stat-block-note { font-size: 0.68rem; color: #a39580; font-weight: 500; }
+
     .monthly-cost-info {
       margin-top: 12px;
       padding: 14px 18px;
@@ -346,8 +427,8 @@
     
     <h1 class="month-title" id="calendar-title">2026. 9</h1>
     <div class="nav-btns">
-      <button class="btn-circle" onclick="window.changeMonth(-1)">&lt;</button>
-      <button class="btn-circle" onclick="window.changeMonth(1)">&gt;</button>
+      <button class="btn-circle" data-month-step="-1" onclick="window.changeMonth(-1)">&lt;</button>
+      <button class="btn-circle" data-month-step="1" onclick="window.changeMonth(1)">&gt;</button>
       <button class="btn-tool" onclick="window.openSearchModal()">🔍 검색</button>
       <button class="btn-tool" onclick="window.openStatsModal()">📊 통계</button>
     </div>
@@ -508,7 +589,7 @@
 
     <div id="statsMainView">
       <div class="stat-block">
-        <div class="stat-block-title">🎬 많이 본 감독 Top 5</div>
+        <div class="stat-block-title">🎬 많이 본 감독 Top 5 <span class="stat-block-note">(같은 영화 재관람은 1편)</span></div>
         <div id="directorStatsList"></div>
       </div>
       <div class="stat-block">
@@ -812,18 +893,35 @@
     return endMins - startMins;
   }
 
+  // 같은 영화를 여러 번 관람한 경우를 하나로 묶기 위한 키.
+  // (제목 공백/대소문자 차이는 무시하고, 개봉일이 있으면 재개봉·동명이영화 구분에 같이 사용)
+  function movieIdentityKey(log) {
+    const title = (log.title || '').toLowerCase().replace(/\s+/g, '');
+    if (!title) return `__id_${log.id}`;
+    const open = (log.openDt || '').trim();
+    return open ? `${title}|${open}` : title;
+  }
+
+  // 감독 Top 집계.
+  // 중요: 같은 영화를 3번 봤어도 '1편'으로만 계산한다.
+  // (보헤미안 랩소디를 3번 봐도 브라이언 싱어는 1편, 다른 영화를 봐야 +1)
   function topCounts(logs, field, limit) {
-    const counts = {};
+    const movieSets = {}; // 이름 -> Set(영화 식별키)
     logs.forEach(l => {
       const val = (l[field] || '').trim();
       if (!val || val === '정보 없음') return;
+      const key = movieIdentityKey(l);
       // 감독은 콤마로 여러 명 들어있을 수 있으니 각각 분리해서 집계
       const names = field === 'director' ? val.split(',').map(s => s.trim()).filter(Boolean) : [val];
       names.forEach(name => {
-        counts[name] = (counts[name] || 0) + 1;
+        if (!movieSets[name]) movieSets[name] = new Set();
+        movieSets[name].add(key);
       });
     });
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
+    return Object.entries(movieSets)
+      .map(([name, set]) => [name, set.size])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
   }
 
   // 영화관 이름은 공백 유무 때문에 "CGV 인천"과 "CGV인천"처럼 같은 곳인데
@@ -994,7 +1092,7 @@
       </div>
 
       <div class="stat-block">
-        <div class="stat-block-title">🎬 이 해의 감독 Top 3</div>
+        <div class="stat-block-title">🎬 이 해의 감독 Top 3 <span class="stat-block-note">(같은 영화 재관람은 1편)</span></div>
         ${topDirectors.length ? topDirectors.map(([name, cnt], i) => `
           <div class="stat-row">
             <span><span class="stat-rank">${i + 1}</span><span class="stat-name">${name}</span></span>
@@ -1776,7 +1874,7 @@ window.deleteCurrentRecord = async function() {
       }
 
       gridHtml += `
-        <div class="day-cell ${isToday} ${extraClass}" ${styleAttr} onclick="window.handleDateClick('${dateStr}')">
+        <div class="day-cell ${isToday} ${extraClass} ${logs.length > 0 ? 'draggable-day' : ''}" data-date="${dateStr}" ${styleAttr} onclick="window.handleDateClick('${dateStr}')">
           <span class="day-number">${date}</span>
           ${badgeHtml}
         </div>
@@ -1800,7 +1898,10 @@ window.deleteCurrentRecord = async function() {
     if (!currentUser) {
       summaryText.innerText = '로그인하면 관람 기록을 볼 수 있어요.';
     } else {
-      summaryText.innerText = monthLogCount > 0 ? `이번 달 총 ${monthLogCount}편의 영화를 기록했어요.` : '이번 달 관람 기록이 없어요';
+      // "총 n편" 부분만 색/굵기로 강조
+      summaryText.innerHTML = monthLogCount > 0
+        ? `이번 달 <b class="summary-highlight">총 ${monthLogCount}편</b>의 영화를 기록했어요.`
+        : '이번 달 관람 기록이 없어요';
     }
   }
 
@@ -1824,10 +1925,13 @@ if (calendarBody) {
   let endX = 0;
 
   calendarBody.addEventListener('touchstart', (e) => {
+    if (dnd.active) return;
     startX = e.touches[0].clientX;
   }, { passive: true });
 
   calendarBody.addEventListener('touchend', (e) => {
+    // 기록을 드래그해서 옮기는 중이면 달 넘김(스와이프)은 무시
+    if (dnd.active || dnd.suppressClick) return;
     endX = e.changedTouches[0].clientX;
     const diffX = startX - endX;
     const threshold = 50; // 50px 이상 쓸어넘겼을 때 동작
@@ -1842,6 +1946,410 @@ if (calendarBody) {
   }, { passive: true });
 }
   
+
+// ===================== 날짜 드래그 이동 (PC 마우스 + 모바일 터치) =====================
+// PC: 기록이 있는 날짜를 마우스로 집어서 끌면 됨.
+// 모바일: 살짝 길게 누르면(약 0.4초) 집히고, 그대로 손가락을 움직여서 옮김.
+//         (짧게 누르면 기존처럼 목록이 열리고, 바로 쓸어 넘기면 달 이동이 그대로 동작)
+// 그 날짜의 기록은 우선 '통째로' 집히고, 놓은 뒤에 여러 개면 어떤 걸 옮길지 물어봄.
+  const dnd = {
+    active: false,        // 실제로 끌고 있는 중인지
+    pending: false,       // 누르긴 했는데 아직 드래그 시작 전인지
+    fromDate: null,
+    ghost: null,
+    startX: 0, startY: 0,
+    isTouch: false,
+    longPressTimer: null,
+    overCell: null,
+    suppressClick: false, // 드래그 직후 날짜 클릭(모달 열림) 방지
+    edgeTimer: null,
+    edgeBtn: null
+  };
+
+  const DND_MOUSE_THRESHOLD = 8;   // 마우스가 이만큼 움직이면 드래그로 인정
+  const DND_LONG_PRESS_MS = 400;   // 터치: 이만큼 누르고 있으면 드래그 시작
+  const DND_TOUCH_SLOP = 12;       // 누르자마자 이만큼 움직이면 스크롤/스와이프로 판단
+
+  function dndEscape(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function dndCellByDate(dateStr) {
+    return document.querySelector('.day-cell[data-date="' + dateStr + '"]');
+  }
+
+  function dndLogsOf(dateStr) {
+    return movieLogs.filter(l => l.date === dateStr);
+  }
+
+  function dndBegin(fromDate, x, y) {
+    const logs = dndLogsOf(fromDate);
+    if (logs.length === 0) { dnd.pending = false; return; }
+
+    dnd.active = true;
+    dnd.pending = false;
+    dnd.fromDate = fromDate;
+    document.body.classList.add('dnd-active');
+
+    const sorted = sortLogsByTime(logs);
+    const mainLog = logs.find(l => l.isMainPoster) || sorted[0];
+
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    if (mainLog && mainLog.poster && mainLog.poster !== DEFAULT_POSTER) {
+      ghost.style.backgroundImage = "url('" + mainLog.poster + "')";
+    }
+    if (logs.length > 1) {
+      ghost.innerHTML = '<span class="drag-ghost-count">' + logs.length + '</span>';
+    }
+    ghost.style.left = x + 'px';
+    ghost.style.top = y + 'px';
+    document.body.appendChild(ghost);
+    dnd.ghost = ghost;
+
+    const src = dndCellByDate(fromDate);
+    if (src) src.classList.add('drag-source');
+
+    if (dnd.isTouch && navigator.vibrate) {
+      try { navigator.vibrate(25); } catch (e) {}
+    }
+  }
+
+  function dndUpdate(x, y) {
+    if (!dnd.active) return;
+    if (dnd.ghost) {
+      dnd.ghost.style.left = x + 'px';
+      dnd.ghost.style.top = y + 'px';
+    }
+
+    const el = document.elementFromPoint(x, y);
+    const cell = el && el.closest ? el.closest('.day-cell') : null;
+
+    if (dnd.overCell && dnd.overCell !== cell) {
+      dnd.overCell.classList.remove('drag-over');
+      dnd.overCell = null;
+    }
+    if (cell && cell.dataset.date && cell.dataset.date !== dnd.fromDate) {
+      cell.classList.add('drag-over');
+      dnd.overCell = cell;
+    }
+
+    // 드래그한 채로 이전/다음 달 버튼 위에 잠깐 머무르면 달을 넘겨줌 (다른 달로 옮기기)
+    const navBtn = el && el.closest ? el.closest('.btn-circle[data-month-step]') : null;
+    if (navBtn !== dnd.edgeBtn) {
+      clearTimeout(dnd.edgeTimer);
+      if (dnd.edgeBtn) dnd.edgeBtn.classList.remove('drag-hot');
+      dnd.edgeBtn = navBtn;
+      if (navBtn) {
+        navBtn.classList.add('drag-hot');
+        const step = Number(navBtn.dataset.monthStep) || 0;
+        const tick = () => {
+          if (!dnd.active || dnd.edgeBtn !== navBtn) return;
+          window.changeMonth(step);
+          dnd.edgeTimer = setTimeout(tick, 850);
+        };
+        dnd.edgeTimer = setTimeout(tick, 550);
+      }
+    }
+  }
+
+  function dndCleanup() {
+    clearTimeout(dnd.longPressTimer);
+    clearTimeout(dnd.edgeTimer);
+    if (dnd.ghost) dnd.ghost.remove();
+    if (dnd.overCell) dnd.overCell.classList.remove('drag-over');
+    if (dnd.edgeBtn) dnd.edgeBtn.classList.remove('drag-hot');
+    document.querySelectorAll('.day-cell.drag-source').forEach(c => c.classList.remove('drag-source'));
+    document.querySelectorAll('.day-cell.drag-over').forEach(c => c.classList.remove('drag-over'));
+    document.body.classList.remove('dnd-active');
+    dnd.active = false;
+    dnd.pending = false;
+    dnd.ghost = null;
+    dnd.overCell = null;
+    dnd.edgeBtn = null;
+    dnd.fromDate = null;
+  }
+
+  function dndFinish(x, y) {
+    if (!dnd.active) { dndCleanup(); return; }
+
+    const fromDate = dnd.fromDate;
+    const el = document.elementFromPoint(x, y);
+    const cell = el && el.closest ? el.closest('.day-cell') : null;
+    const toDate = cell ? cell.dataset.date : null;
+
+    dndCleanup();
+
+    // 드래그가 끝난 직후의 클릭(=날짜 모달 열림)은 한 번 막아줌
+    dnd.suppressClick = true;
+    setTimeout(() => { dnd.suppressClick = false; }, 450);
+
+    if (fromDate && toDate && toDate !== fromDate) {
+      window.handleDayDrop(fromDate, toDate);
+    }
+  }
+
+  const dndGrid = document.getElementById('calendar-grid');
+
+  if (dndGrid) {
+    // 드래그 직후 발생하는 클릭 삼키기 (캡처 단계라서 셀의 onclick보다 먼저 실행됨)
+    dndGrid.addEventListener('click', (e) => {
+      if (dnd.active || dnd.suppressClick) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+
+    // ---------- 마우스 ----------
+    dndGrid.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !currentUser) return;
+      const cell = e.target.closest('.day-cell');
+      if (!cell || !cell.dataset.date) return;
+      if (dndLogsOf(cell.dataset.date).length === 0) return;
+
+      dnd.isTouch = false;
+      dnd.pending = true;
+      dnd.fromDate = cell.dataset.date;
+      dnd.startX = e.clientX;
+      dnd.startY = e.clientY;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (dnd.isTouch) return;
+      if (dnd.pending && !dnd.active) {
+        const dist = Math.hypot(e.clientX - dnd.startX, e.clientY - dnd.startY);
+        if (dist > DND_MOUSE_THRESHOLD) dndBegin(dnd.fromDate, e.clientX, e.clientY);
+        return;
+      }
+      if (dnd.active) {
+        e.preventDefault();
+        dndUpdate(e.clientX, e.clientY);
+      }
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (dnd.isTouch) return;
+      if (dnd.active) dndFinish(e.clientX, e.clientY);
+      else if (dnd.pending) { dnd.pending = false; dnd.fromDate = null; }
+    });
+
+    // ---------- 터치 ----------
+    dndGrid.addEventListener('touchstart', (e) => {
+      if (!currentUser || e.touches.length !== 1) return;
+      const cell = e.target.closest('.day-cell');
+      if (!cell || !cell.dataset.date) return;
+      if (dndLogsOf(cell.dataset.date).length === 0) return;
+
+      dnd.isTouch = true;
+      dnd.pending = true;
+      dnd.fromDate = cell.dataset.date;
+      dnd.startX = e.touches[0].clientX;
+      dnd.startY = e.touches[0].clientY;
+
+      clearTimeout(dnd.longPressTimer);
+      dnd.longPressTimer = setTimeout(() => {
+        if (dnd.pending) dndBegin(dnd.fromDate, dnd.startX, dnd.startY);
+      }, DND_LONG_PRESS_MS);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!dnd.isTouch) return;
+      const t = e.touches[0];
+      if (!t) return;
+
+      if (dnd.pending && !dnd.active) {
+        // 길게 누르기 전에 손가락이 움직였다면 스크롤/스와이프 의도로 보고 취소
+        const dist = Math.hypot(t.clientX - dnd.startX, t.clientY - dnd.startY);
+        if (dist > DND_TOUCH_SLOP) {
+          clearTimeout(dnd.longPressTimer);
+          dnd.pending = false;
+          dnd.fromDate = null;
+        }
+        return;
+      }
+
+      if (dnd.active) {
+        e.preventDefault(); // 드래그 중에는 화면이 같이 스크롤되지 않게
+        dndUpdate(t.clientX, t.clientY);
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+      if (!dnd.isTouch) return;
+      clearTimeout(dnd.longPressTimer);
+      if (dnd.active) {
+        const t = e.changedTouches[0];
+        dndFinish(t ? t.clientX : dnd.startX, t ? t.clientY : dnd.startY);
+      } else {
+        dnd.pending = false;
+        dnd.fromDate = null;
+      }
+    });
+
+    document.addEventListener('touchcancel', () => {
+      clearTimeout(dnd.longPressTimer);
+      if (dnd.active) dndCleanup();
+      else { dnd.pending = false; dnd.fromDate = null; }
+    });
+  }
+
+  // 여러 기록이 있는 날짜를 옮길 때: 옮길 기록을 여러 개 골라서 한 번에 이동
+  function pickRecordsToMove(logs, fromDate, toDate) {
+    const sorted = sortLogsByTime(logs);
+
+    const itemsHtml = sorted.map(log => {
+      const poster = log.poster || DEFAULT_POSTER;
+      const timeStr = (log.startTime || log.endTime)
+        ? `${log.startTime || ''} ~ ${log.endTime || ''}`
+        : '시간 미입력';
+      return `
+        <div class="move-pick-item" data-id="${dndEscape(log.id)}">
+          <div class="move-pick-check">✓</div>
+          <img src="${dndEscape(poster)}" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
+          <div class="move-pick-body">
+            <div class="move-pick-title">${dndEscape(log.title)}</div>
+            <div class="move-pick-sub">${dndEscape(log.cinema || '영화관 미입력')} | ${dndEscape(timeStr)}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    return Swal.fire({
+      title: 'Film Note',
+      html: `
+        <div class="move-pick-desc">
+          ${fromDate} → <b>${toDate}</b><br>
+          이 날의 기록 ${sorted.length}개 중<br>
+          <b>어떤 기록을 옮기시겠어요?</b>
+        </div>
+        <div class="move-pick-selectall"><button type="button" id="movePickAllBtn">전체 선택</button></div>
+        <div class="move-pick-list">${itemsHtml}</div>`,
+      showCancelButton: true,
+      showConfirmButton: true,
+      confirmButtonText: '옮기기',
+      cancelButtonText: '취소',
+      confirmButtonColor: '#f2ebd9',
+      cancelButtonColor: '#e9ecef',
+      customClass: { popup: 'move-pick-popup' },
+      didOpen: () => {
+        const cancelBtn = Swal.getCancelButton();
+        if (cancelBtn) cancelBtn.style.color = '#333333';
+
+        const popup = Swal.getPopup();
+        const confirmBtn = Swal.getConfirmButton();
+        const items = Array.from(popup.querySelectorAll('.move-pick-item'));
+        const allBtn = popup.querySelector('#movePickAllBtn');
+
+        const selectedIds = () => items.filter(el => el.classList.contains('selected')).map(el => el.dataset.id);
+
+        const refresh = () => {
+          const n = selectedIds().length;
+          confirmBtn.disabled = n === 0;
+          confirmBtn.innerText = n > 0 ? `${n}개 옮기기` : '옮기기';
+          allBtn.innerText = (n === items.length) ? '전체 해제' : '전체 선택';
+        };
+
+        items.forEach(el => {
+          el.addEventListener('click', () => {
+            el.classList.toggle('selected');
+            refresh();
+          });
+        });
+
+        allBtn.addEventListener('click', () => {
+          const selectAll = selectedIds().length !== items.length;
+          items.forEach(el => el.classList.toggle('selected', selectAll));
+          refresh();
+        });
+
+        refresh();
+      },
+      preConfirm: () => {
+        const popup = Swal.getPopup();
+        const ids = Array.from(popup.querySelectorAll('.move-pick-item.selected')).map(el => el.dataset.id);
+        if (ids.length === 0) {
+          Swal.showValidationMessage('옮길 기록을 하나 이상 선택해주세요');
+          return false;
+        }
+        return ids;
+      }
+    }).then(result => (result.isConfirmed ? result.value : null));
+  }
+
+  window.handleDayDrop = async function(fromDate, toDate) {
+    if (!currentUser) return;
+    const logs = dndLogsOf(fromDate);
+    if (logs.length === 0) return;
+
+    let targetIds = null;
+
+    if (logs.length === 1) {
+      const result = await Swal.fire({
+        title: 'Film Note',
+        html: `<b>${dndEscape(logs[0].title)}</b> 기록을<br>${fromDate} → <b>${toDate}</b> 로 옮길까요?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '옮기기',
+        cancelButtonText: '취소',
+        confirmButtonColor: '#f2ebd9',
+        cancelButtonColor: '#e9ecef',
+        didOpen: () => {
+          const cancelBtn = Swal.getCancelButton();
+          if (cancelBtn) cancelBtn.style.color = '#333333';
+        }
+      });
+      if (!result.isConfirmed) return;
+      targetIds = [logs[0].id];
+    } else {
+      targetIds = await pickRecordsToMove(logs, fromDate, toDate);
+    }
+
+    if (!targetIds || targetIds.length === 0) return;
+    await moveLogsToDate(targetIds, toDate);
+  };
+
+  async function moveLogsToDate(ids, toDate) {
+    // 옮겨가는 날짜에 이미 기록이 있으면, 대표 포스터가 둘이 되지 않게 해제해서 옮김
+    const targetHasLogs = movieLogs.some(l => l.date === toDate);
+
+    try {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        const payload = { date: toDate };
+        if (targetHasLogs) payload.isMainPoster = false;
+        batch.update(doc(db, "movieLogs", id), payload);
+      });
+      await batch.commit();
+
+      // 옮긴 날짜가 다른 달이면 그 달로 이동해서 결과를 바로 볼 수 있게
+      const [ty, tm] = toDate.split('-').map(Number);
+      if (currentDate.getFullYear() !== ty || currentDate.getMonth() !== tm - 1) {
+        currentDate = new Date(ty, tm - 1, 1);
+      }
+      renderCalendar();
+
+      Swal.fire({
+        title: 'Film Note',
+        html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
+        icon: 'success',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9',
+        timer: 1600,
+        timerProgressBar: true
+      });
+    } catch (e) {
+      console.error("날짜 이동 실패:", e);
+      Swal.fire({
+        title: 'Film Note',
+        text: '날짜를 옮기는 중 오류가 발생했습니다.',
+        icon: 'error',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
+  }
+
 // 안드로이드 기기 판별 함수
   function isAndroid() {
     return /Android/i.test(navigator.userAgent);
