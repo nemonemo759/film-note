@@ -438,7 +438,8 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
   import { 
-    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch 
+    getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch,
+    enableIndexedDbPersistence
   } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
   import { 
     getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
@@ -455,6 +456,13 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+
+  // 오프라인(IndexedDB) 캐시 활성화: 재방문 시 서버 응답을 기다리지 않고
+  // 로컬에 저장된 movieLogs를 즉시 보여준 뒤, 백그라운드에서 최신 데이터로 동기화함
+  enableIndexedDbPersistence(db).catch((err) => {
+    console.warn('오프라인 캐시 비활성화됨:', err.code);
+  });
+
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
@@ -1136,6 +1144,22 @@ window.deleteCurrentRecord = async function() {
 
   // 공공데이터포털 특일 정보 API 호출 함수
   const API_KEY = '8e42e2ef37797a08deaedbcfc1e57ac81cf7a7994bf84799da651595082929cc';
+  const HOLIDAY_CACHE_KEY = 'filmNote_holidayCache_v1';
+
+  // 공휴일 결과를 localStorage에 캐싱 (월별로, 앱을 재방문해도 API를 다시 부르지 않도록)
+  function loadHolidayCache() {
+    try {
+      return JSON.parse(localStorage.getItem(HOLIDAY_CACHE_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveHolidayCache(cache) {
+    try {
+      localStorage.setItem(HOLIDAY_CACHE_KEY, JSON.stringify(cache));
+    } catch (e) {}
+  }
+  const holidayMemCache = loadHolidayCache();
 
   async function fetchHolidays(year, month) {
     const formattedMonth = String(month + 1).padStart(2, '0');
@@ -1164,13 +1188,43 @@ window.deleteCurrentRecord = async function() {
       return [];
     }
   }
-  
-  async function renderCalendar() {
+
+  // 캐시가 있으면 즉시 반환하고, 없거나 오래됐으면 백그라운드에서 갱신 후 콜백으로 전달
+  function getHolidaysWithCache(year, month, onUpdated) {
+    const key = `${year}-${month}`;
+    const cached = holidayMemCache[key];
+
+    if (cached) {
+      // 캐시 있음: 즉시 사용, 백그라운드에서 조용히 최신화만 시도
+      fetchHolidays(year, month).then(fresh => {
+        const changed = JSON.stringify(fresh) !== JSON.stringify(cached.list);
+        holidayMemCache[key] = { list: fresh, ts: Date.now() };
+        saveHolidayCache(holidayMemCache);
+        if (changed) onUpdated(fresh);
+      }).catch(() => {});
+      return cached.list;
+    }
+
+    // 캐시 없음: 우선 빈 배열로 즉시 렌더링, 응답 오면 업데이트
+    fetchHolidays(year, month).then(fresh => {
+      holidayMemCache[key] = { list: fresh, ts: Date.now() };
+      saveHolidayCache(holidayMemCache);
+      onUpdated(fresh);
+    }).catch(() => {});
+    return [];
+  }
+
+  function renderCalendar() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    // API에서 선거일 포함 공휴일 가져오기
-    const holidayList = await fetchHolidays(year, month);
+    // 공휴일 API 응답을 기다리지 않고 캐시(또는 빈 값)로 즉시 렌더링
+    // 최신 공휴일 정보가 도착하면 같은 달을 보고 있을 때만 조용히 다시 그림
+    const holidayList = getHolidaysWithCache(year, month, (freshList) => {
+      if (currentDate.getFullYear() === year && currentDate.getMonth() === month) {
+        renderCalendar();
+      }
+    });
 
     document.getElementById('calendar-title').innerText = `${year}. ${month + 1}`;
     const grid = document.getElementById('calendar-grid');
