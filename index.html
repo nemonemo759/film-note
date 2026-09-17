@@ -9,6 +9,10 @@
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
+  <link rel="preconnect" href="https://api.themoviedb.org" crossorigin>
+  <link rel="dns-prefetch" href="https://kobis.or.kr">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
   
   <style>
@@ -175,6 +179,22 @@
     .swal2-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .summary-highlight { color: #b58d53; font-weight: 800; }
+
+    /* Firebase 연결 실패 안내 배너 */
+    .firebase-error-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100000;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #b03a2e; color: #fff;
+      font-size: 0.8rem; font-weight: 600;
+      padding: 9px 14px; text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .firebase-error-banner button {
+      background: #fff; color: #b03a2e; border: none;
+      border-radius: 14px; padding: 4px 12px;
+      font-size: 0.75rem; font-weight: 800; cursor: pointer;
+      flex-shrink: 0;
+    }
     .stat-block-note { font-size: 0.68rem; color: #a39580; font-weight: 500; }
 
     .monthly-cost-info {
@@ -615,14 +635,16 @@
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { 
-    initializeFirestore, persistentLocalCache, persistentSingleTabManager,
-    collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch
-  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-  import { 
-    getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged 
-  } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+  // ⚡ Firebase SDK(app+firestore+auth)는 합쳐서 수백 KB라, 예전처럼 정적 import를 쓰면
+  //    "SDK 다운로드 → 파싱 → 로그인 상태 복원 → Firestore 첫 응답"이 전부 끝난 뒤에야
+  //    이 스크립트가 실행되면서 달력이 그려졌음. (첫 접속 때 0.5~1초 빈 화면의 주범)
+  //    이제 SDK는 동적 import로 뒤에서 따로 불러오고, 화면은 localStorage에 저장해둔
+  //    지난번 기록으로 즉시 그린 다음, 데이터가 도착하면 조용히 갱신함.
+  let firebaseReady = false;
+  let db = null, auth = null, provider = null;
+  let initializeFirestore, persistentLocalCache, persistentSingleTabManager;
+  let collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch;
+  let getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged;
 
   const firebaseConfig = {
     apiKey: "AIzaSyCSPiOoFvq4zJe_U1HyFlHZHeLs1pHFeW8",
@@ -633,32 +655,181 @@
     appId: "1:915603733331:web:ba61cf156e6496c884bfa6"
   };
 
-  const app = initializeApp(firebaseConfig);
+  async function initFirebaseOnce() {
+    const [appMod, fsMod, authMod] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js")
+    ]);
 
-  // 오프라인(IndexedDB) 캐시 활성화: 재방문 시 서버 응답을 기다리지 않고
-  // 로컬에 저장된 movieLogs를 즉시 보여준 뒤, 백그라운드에서 최신 데이터로 동기화함
-  // (구버전 enableIndexedDbPersistence 대신 최신 방식인 localCache 옵션 사용)
-  const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) })
-  });
+    ({ initializeFirestore, persistentLocalCache, persistentSingleTabManager,
+       collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, writeBatch } = fsMod);
+    ({ getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } = authMod);
 
-  const auth = getAuth(app);
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({
-    prompt: 'select_account' // 👈 강제로 계정 선택 팝업을 띄우는 옵션
-  });
+    const app = appMod.initializeApp(firebaseConfig);
+
+    // 오프라인(IndexedDB) 캐시 활성화: 재방문 시 서버 응답을 기다리지 않고
+    // 로컬에 저장된 movieLogs를 즉시 보여준 뒤, 백그라운드에서 최신 데이터로 동기화함
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentSingleTabManager({}) }),
+      // 회사망/공유기/프록시 환경에서 WebChannel 스트리밍이 막히면 Firestore가
+      // 재시도를 반복하면서 저장이 수십 초씩 걸리는 경우가 있어서, 연결 방식을
+      // 자동 감지하도록 켜둠 (막힌 환경이면 곧바로 long-polling으로 전환)
+      experimentalAutoDetectLongPolling: true
+    });
+
+    auth = getAuth(app);
+    provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account' // 👈 강제로 계정 선택 팝업을 띄우는 옵션
+    });
+
+    firebaseReady = true;
+    onAuthStateChanged(auth, handleAuthState);
+  }
+
+  // 접속 순간의 일시적인 네트워크 문제(와이파이 전환, 확장 프로그램 간섭 등)로
+  // 모듈을 못 받아오는 경우가 있어서, 실패하면 잠깐 텀을 두고 몇 번 더 시도함.
+  // 그래도 계속 실패하면 화면 위쪽에 눈에 띄는 안내 + '다시 시도' 버튼을 띄워줌
+  // (예전처럼 아무 설명 없이 로그인/저장이 그냥 안 되는 상태로 두지 않기 위함).
+  async function initFirebase() {
+    const delays = [800, 2000, 4000];
+    let lastErr = null;
+
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        await initFirebaseOnce();
+        hideFirebaseErrorBanner();
+        return;
+      } catch (e) {
+        lastErr = e;
+        console.error(`Firebase 초기화 실패 (시도 ${attempt + 1}/${delays.length + 1}):`, e);
+        if (attempt < delays.length) {
+          await new Promise(r => setTimeout(r, delays[attempt]));
+        }
+      }
+    }
+
+    showFirebaseErrorBanner();
+    throw lastErr;
+  }
+
+  function showFirebaseErrorBanner() {
+    let banner = document.getElementById('firebaseErrorBanner');
+    if (banner) { banner.style.display = 'flex'; return; }
+
+    banner = document.createElement('div');
+    banner.id = 'firebaseErrorBanner';
+    banner.className = 'firebase-error-banner';
+    banner.innerHTML = `
+      <span>서버 연결에 실패했어요. 네트워크 상태를 확인해주세요.</span>
+      <button type="button" id="firebaseRetryBtn">다시 시도</button>
+    `;
+    document.body.prepend(banner);
+    document.getElementById('firebaseRetryBtn').addEventListener('click', () => {
+      document.getElementById('firebaseRetryBtn').innerText = '연결 중...';
+      firebaseInitPromise = initFirebase().catch(() => {});
+    });
+  }
+
+  function hideFirebaseErrorBanner() {
+    const banner = document.getElementById('firebaseErrorBanner');
+    if (banner) banner.style.display = 'none';
+  }
 
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
   const DEFAULT_POSTER = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22250%22 height=%22350%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23dcd3be%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 fill=%22%23ffffff%22 font-family=%22sans-serif%22 font-size=%2220%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E";
   
+  // TMDB 포스터는 원본(w780)을 그대로 쓰면 달력 썸네일 한 칸에도 수백 KB가 내려옴.
+  // 쓰이는 자리에 맞는 크기로 URL만 바꿔서 첫 화면 로딩을 크게 줄임.
+  // (w185=달력 칸, w342=목록/상세, original=확대보기)
+  function posterAt(url, size) {
+    if (!url || !url.includes('image.tmdb.org')) return url;
+    return url.replace(/\/t\/p\/w\d+|\/t\/p\/original/, `/t/p/${size}`);
+  }
+
+  // ---- 기록 로컬 스냅샷 캐시 ----
+  // Firebase SDK 다운로드 + 로그인 상태 복원 + Firestore 첫 응답까지 0.5~1초가 걸리는데,
+  // 그동안 달력이 비어 보이는 게 문제였음.
+  // localStorage는 동기라서, 스크립트가 실행되는 즉시 지난번 기록을 읽어 바로 그려줌.
+  // 이후 Firestore 응답이 도착하면 조용히 최신 데이터로 교체됨.
+  const LOGS_CACHE_KEY = 'filmNote_logsCache_v1';
+
+  function saveLogsCache(uid, logs) {
+    try {
+      localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify({ uid, ts: Date.now(), logs }));
+    } catch (e) { /* 용량 초과 등은 무시 */ }
+  }
+
+  function loadLogsCache() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || 'null');
+      return (parsed && Array.isArray(parsed.logs)) ? parsed : null;
+    } catch (e) { return null; }
+  }
+
   let currentDate = new Date();
   let movieLogs = [];
+  let usingCachedLogs = false;   // 아직 서버 응답 전이고 캐시로 그려진 상태인지
+
+  // 달력 한 번 그릴 때 movieLogs.filter()를 날짜 수만큼(최대 31번) 돌던 것을
+  // 날짜 -> 기록 배열 Map으로 한 번만 만들어 재사용. 드래그/클릭 조회도 이걸 씀.
+  let logsIndex = null;
+  let logsIndexSource = null;
+  function logsOfDate(dateStr) {
+    if (logsIndexSource !== movieLogs) {
+      logsIndex = new Map();
+      for (const log of movieLogs) {
+        if (!log.date) continue;
+        const arr = logsIndex.get(log.date);
+        if (arr) arr.push(log);
+        else logsIndex.set(log.date, [log]);
+      }
+      logsIndexSource = movieLogs;
+    }
+    return logsIndex.get(dateStr) || [];
+  }
+
+  (function hydrateFromCache() {
+    if (!localStorage.getItem('filmNote_user')) return; // 로그인 흔적이 없으면 스킵
+    const cached = loadLogsCache();
+    if (cached && cached.logs.length > 0) {
+      movieLogs = cached.logs;
+      usingCachedLogs = true;
+    }
+  })();
   let activeRecordId = null;
   let debounceTimer = null;
   let currentUser = null;
   let unsubscribeSnapshot = null;
   let isSaving = false;
+
+  // 로그인 상태 복원이 끝났는지 알려주는 신호.
+  // 접속 직후 곧바로 날짜를 눌렀을 때 "로그인이 필요합니다"가 잘못 뜨는 걸 막기 위함.
+  let resolveAuthReady;
+  const authReady = new Promise(resolve => { resolveAuthReady = resolve; });
+
+  async function requireLogin() {
+    if (currentUser) return true;
+    // 예전에 로그인한 흔적이 있으면 복원이 끝날 때까지만 잠깐 기다림
+    if (localStorage.getItem('filmNote_user')) {
+      await Promise.race([authReady, new Promise(r => setTimeout(r, 4000))]);
+    }
+    if (currentUser) return true;
+
+    Swal.fire({
+      title: 'Film Note',
+      text: '로그인이 필요한 서비스입니다.',
+      icon: 'warning',
+      confirmButtonText: '확인',
+      confirmButtonColor: '#f2ebd9'
+    });
+    return false;
+  }
+  // 자동완성에서 영화를 고르면 KOFIC(출연)·TMDB(포스터) 조회가 비동기로 돌아감.
+  // 저장 시 이 조회가 끝났는지 확인할 수 있도록 진행 중인 Promise를 보관해둠.
+  let pendingMetaFetch = null;
 
   // ===================== 영화관 체인 / 프로모션 옵션 =====================
   const CINEMA_CHAINS = ['CGV', '롯데시네마', '메가박스', 'CineQ'];
@@ -721,7 +892,16 @@
     }
   })();
 
-  window.handleAuth = function() {
+  window.handleAuth = async function() {
+    if (!firebaseReady) {
+      // 접속 직후 아주 잠깐은 SDK 로딩 중일 수 있어서 그때만 기다림
+      await firebaseInitPromise;
+    }
+    if (!firebaseReady) {
+      // 재시도까지 다 실패한 경우: 조용히 오류를 던지는 대신 안내만 하고 중단
+      showFirebaseErrorBanner();
+      return;
+    }
     if (currentUser) {
       signOut(auth).then(() => {
         Swal.fire({
@@ -746,8 +926,9 @@
     }
   };
 
-  onAuthStateChanged(auth, (user) => {
+  function handleAuthState(user) {
     currentUser = user;
+    resolveAuthReady();
     const authBtnText = document.getElementById('authBtnText');
     const userProfile = document.getElementById('userProfile');
 
@@ -769,16 +950,23 @@
       const q = query(collection(db, "movieLogs"), where("uid", "==", user.uid));
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         movieLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        usingCachedLogs = false;
         renderCalendar();
+        // 다음 접속 때 즉시 그릴 수 있도록 저장 (렌더를 막지 않게 유휴 시간에)
+        const persist = () => saveLogsCache(user.uid, movieLogs);
+        if (window.requestIdleCallback) requestIdleCallback(persist, { timeout: 2000 });
+        else setTimeout(persist, 0);
       }, (err) => console.error("Firestore 수신 오류:", err));
     } else {
       localStorage.removeItem('filmNote_user');
+      localStorage.removeItem(LOGS_CACHE_KEY);
       authBtnText.innerText = '구글 로그인';
       userProfile.style.display = 'none';
       movieLogs = [];
+      usingCachedLogs = false;
       renderCalendar();
     }
-  });
+  }
 
   function sortLogsByTime(logs) {
     return [...logs].sort((a, b) => {
@@ -824,16 +1012,8 @@
   };
 
   // ===================== 검색 =====================
-  window.openSearchModal = function() {
-    if (!currentUser) {
-      return Swal.fire({
-        title: 'Film Note',
-        text: '로그인이 필요한 서비스입니다.',
-        icon: 'warning',
-        confirmButtonText: '확인',
-        confirmButtonColor: '#f2ebd9'
-      });
-    }
+  window.openSearchModal = async function() {
+    if (!(await requireLogin())) return;
     document.getElementById('searchInput').value = '';
     document.getElementById('searchResultsContainer').innerHTML = '<div class="search-result-empty">영화 제목을 입력해보세요</div>';
     document.getElementById('searchModal').style.display = 'flex';
@@ -860,10 +1040,10 @@
     }
 
     container.innerHTML = matched.map(log => {
-      const poster = log.poster || DEFAULT_POSTER;
+      const poster = posterAt(log.poster || DEFAULT_POSTER, 'w185');
       return `
         <div class="movie-item-card" onclick="window.goToSearchResult('${log.date}', '${log.id}')">
-          <img src="${poster}" class="item-poster" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
+          <img src="${poster}" class="item-poster" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
           <div class="item-info">
             <div class="item-title">${log.title}</div>
             <div class="item-sub">${log.date} · ${log.cinema || '영화관 미입력'}</div>
@@ -992,16 +1172,8 @@
     `).join('');
   }
 
-  window.openStatsModal = function() {
-    if (!currentUser) {
-      return Swal.fire({
-        title: 'Film Note',
-        text: '로그인이 필요한 서비스입니다.',
-        icon: 'warning',
-        confirmButtonText: '확인',
-        confirmButtonColor: '#f2ebd9'
-      });
-    }
+  window.openStatsModal = async function() {
+    if (!(await requireLogin())) return;
     renderStatRows('directorStatsList', topCounts(movieLogs, 'director', 5), '편');
     renderStatRows('cinemaStatsList', topCinemaCounts(movieLogs, 5), '번');
 
@@ -1138,20 +1310,11 @@
     `;
   };
 
-  window.handleDateClick = function(dateStr) {
-    if (!currentUser) {
-      Swal.fire({
-        title: 'Film Note',
-        text: '로그인이 필요한 서비스입니다.',
-        icon: 'warning',
-        confirmButtonText: '확인',
-        confirmButtonColor: '#f2ebd9'
-      });
-      return;
-    }
+  window.handleDateClick = async function(dateStr) {
+    if (!(await requireLogin())) return;
 
     document.getElementById('selectedDate').value = dateStr;
-    const logs = movieLogs.filter(l => l.date === dateStr);
+    const logs = logsOfDate(dateStr);
 
     if (logs.length === 0) {
       window.openAddModal(dateStr);
@@ -1167,14 +1330,16 @@
 
     const sortedLogs = sortLogsByTime(logs);
 
-    sortedLogs.forEach(log => {
-      const poster = log.poster || DEFAULT_POSTER;
+    // innerHTML += 를 반복하면 그때마다 DOM 전체를 다시 파싱하게 되어 느림.
+    // 문자열을 한 번에 만들어서 한 번만 주입함.
+    container.innerHTML = sortedLogs.map(log => {
+      const poster = posterAt(log.poster || DEFAULT_POSTER, 'w185');
       const timeStr = (log.startTime || log.endTime) ? `${log.startTime || ''} ~ ${log.endTime || ''}` : '시간 미입력';
       const mainBadge = log.isMainPoster ? `<span class="main-badge">대표</span>` : '';
 
-      container.innerHTML += `
+      return `
         <div class="movie-item-card" onclick="window.openDetailModal('${log.id}')">
-          <img src="${poster}" class="item-poster" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
+          <img src="${poster}" class="item-poster" loading="lazy" decoding="async" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
           <div class="item-info">
             <div class="item-title">${log.title}</div>
             <div class="item-sub">${log.cinema || '영화관 미입력'} | ${timeStr}</div>
@@ -1182,7 +1347,7 @@
           ${mainBadge}
         </div>
       `;
-    });
+    }).join('');
     document.getElementById('listModal').style.display = 'flex';
   };
 
@@ -1193,7 +1358,7 @@
     activeRecordId = String(id);
     window.closeModal('listModal');
 
-    document.getElementById('detailPoster').src = record.poster || DEFAULT_POSTER;
+    document.getElementById('detailPoster').src = posterAt(record.poster || DEFAULT_POSTER, 'w342');
     document.getElementById('detailTitle').innerText = record.title;
     document.getElementById('detailDate').innerText = record.date;
     document.getElementById('detailCinema').innerText = record.cinema || '정보 없음';
@@ -1226,7 +1391,7 @@
     const currentRecord = movieLogs.find(l => String(l.id) === String(activeRecordId));
     if (!currentRecord) return;
 
-    const sameDayLogs = movieLogs.filter(l => l.date === currentRecord.date);
+    const sameDayLogs = logsOfDate(currentRecord.date);
     const batch = writeBatch(db);
 
     sameDayLogs.forEach(log => {
@@ -1238,18 +1403,18 @@
       }
     });
 
-    try {
-      await batch.commit();
-      const updatedState = !currentRecord.isMainPoster;
-      const btnMain = document.getElementById('btnMainPoster');
-      if (updatedState) {
-        btnMain.innerText = '★ 대표 포스터로 설정됨';
-        btnMain.classList.add('active');
-      } else {
-        btnMain.innerText = '☆ 캘린더 대표 포스터로 지정';
-        btnMain.classList.remove('active');
-      }
-    } catch (e) {
+    // 서버 응답을 기다리지 않고 버튼 상태를 먼저 반영 (로컬에는 이미 적용됨)
+    const updatedState = !currentRecord.isMainPoster;
+    const btnMain = document.getElementById('btnMainPoster');
+    if (updatedState) {
+      btnMain.innerText = '★ 대표 포스터로 설정됨';
+      btnMain.classList.add('active');
+    } else {
+      btnMain.innerText = '☆ 캘린더 대표 포스터로 지정';
+      btnMain.classList.remove('active');
+    }
+
+    batch.commit().catch(e => {
       console.error("대표 포스터 설정 오류:", e);
       Swal.fire({
         title: 'Film Note',
@@ -1258,7 +1423,7 @@
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
-    }
+    });
   };
 
   window.openEditModal = function() {
@@ -1307,6 +1472,7 @@
 
     document.getElementById('openDtVal').value = record.openDt || '';
     document.getElementById('directorVal').value = record.director || '';
+    pendingMetaFetch = null;
     document.getElementById('actorsVal').value = record.actors || '';
     
     document.getElementById('movieMetaPreview').value = record.openDt ? `개봉: ${record.openDt} | 감독: ${record.director} | 출연: ${record.actors}` : '';
@@ -1349,21 +1515,19 @@ window.deleteCurrentRecord = async function() {
     
     if (!result.isConfirmed) return;
 
-    try {
-      await deleteDoc(doc(db, "movieLogs", activeRecordId));
-      activeRecordId = null;
-    } catch (e) {
+    // 저장과 동일하게, 로컬에는 즉시 반영되므로 서버 응답을 기다리지 않음
+    deleteDoc(doc(db, "movieLogs", activeRecordId)).catch(e => {
       console.error("삭제 실패:", e);
-      await Swal.fire({
+      Swal.fire({
         title: 'Film Note',
-        text: '삭제 처리 중 오류가 발생했습니다.',
+        text: '삭제 내용을 서버에 반영하지 못했습니다. 네트워크 상태를 확인해주세요.',
         icon: 'error',
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
-    } finally {
-      window.closeAllModals();
-    }
+    });
+    activeRecordId = null;
+    window.closeAllModals();
   };
 
   window.openAddModal = function(dateStr) {
@@ -1396,6 +1560,7 @@ window.deleteCurrentRecord = async function() {
     document.getElementById('directorVal').value = '';
     document.getElementById('actorsVal').value = '';
     document.getElementById('posterUrlVal').value = DEFAULT_POSTER;
+    pendingMetaFetch = null;
     hideAutoComplete();
     
     document.getElementById('addModal').style.display = 'flex';
@@ -1460,11 +1625,10 @@ window.deleteCurrentRecord = async function() {
       });
 
       const autoBox = document.getElementById('autoCompleteList');
-      autoBox.innerHTML = '';
 
-      if (list.length === 0) return hideAutoComplete();
+      if (list.length === 0) { autoBox.innerHTML = ''; return hideAutoComplete(); }
 
-      list.forEach(movie => {
+      autoBox.innerHTML = list.map(movie => {
         const title = movie.movieNm || '제목 없음';
         const prodYear = movie.prdtYear || '';
         const movieCd = movie.movieCd || '';
@@ -1487,7 +1651,7 @@ window.deleteCurrentRecord = async function() {
         const safeTitle = title.replace(/'/g, "\\'");
         const safeDir = director.replace(/'/g, "\\'");
 
-        autoBox.innerHTML += `
+        return `
           <div class="autocomplete-item" onclick="window.selectMovie('${safeTitle}', '${prodYear}', '${openDt}', '${safeDir}', '${movieCd}')">
             <div>
               <div class="auto-title">${title}</div>
@@ -1496,7 +1660,7 @@ window.deleteCurrentRecord = async function() {
             <span style="font-size: 0.75rem; color: #b58d53; font-weight:700;">선택</span>
           </div>
         `;
-      });
+      }).join('');
 
       autoBox.style.display = 'block';
     } catch (e) {
@@ -1504,7 +1668,15 @@ window.deleteCurrentRecord = async function() {
     }
   }
 
-  window.selectMovie = async function(movieNm, prodYear, openDt, director, movieCd) {
+  window.selectMovie = function(movieNm, prodYear, openDt, director, movieCd) {
+    const task = fetchMovieMeta(movieNm, prodYear, openDt, director, movieCd);
+    pendingMetaFetch = task.finally(() => {
+      if (pendingMetaFetch === task) pendingMetaFetch = null;
+    });
+    return pendingMetaFetch;
+  };
+
+  async function fetchMovieMeta(movieNm, prodYear, openDt, director, movieCd) {
     document.getElementById('movieTitle').value = movieNm;
     hideAutoComplete();
 
@@ -1596,7 +1768,7 @@ window.deleteCurrentRecord = async function() {
     document.getElementById('actorsVal').value = actors;
     document.getElementById('posterUrlVal').value = posterUrl;
     document.getElementById('movieMetaPreview').value = `개봉: ${openDt} | 감독: ${director} | 출연: ${actors}`;
-  };
+  }
 
   function hideAutoComplete() {
     document.getElementById('autoCompleteList').style.display = 'none';
@@ -1656,6 +1828,19 @@ window.deleteCurrentRecord = async function() {
     }
 
     const editId = document.getElementById('editRecordId').value;
+    const saveBtn = document.getElementById('saveBtn');
+
+    // 영화를 방금 고른 직후라면 포스터/출연 정보를 받아오는 중일 수 있음.
+    // 이걸 안 기다리면 포스터가 빠진 채로 저장되는 경우가 생겨서, 최대 3초만 기다림.
+    if (pendingMetaFetch) {
+      if (saveBtn) saveBtn.innerText = '영화 정보 확인 중...';
+      await Promise.race([
+        pendingMetaFetch,
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+    }
+    if (saveBtn) saveBtn.innerText = '저장 중...';
+
     const date = document.getElementById('selectedDate').value;
 
     const sH = document.getElementById('startH').value;
@@ -1690,25 +1875,29 @@ window.deleteCurrentRecord = async function() {
       createdAt: editId ? (movieLogs.find(l => l.id === editId)?.createdAt || Date.now()) : Date.now()
     };
 
-    const saveBtn = document.getElementById('saveBtn');
-
+    // ⚠️ 저장이 가끔 아주 오래 걸리던 원인:
+    // setDoc/addDoc의 Promise는 "서버가 받았다"고 응답할 때 풀린다.
+    // 그런데 Firestore는 쓰기를 이미 로컬에 즉시 반영하고 onSnapshot도 바로 쏴준다.
+    // 즉 화면상으로는 저장이 끝났는데, await 때문에 서버 왕복(네트워크 상태에 따라
+    // 수 초~수십 초)을 다 기다린 뒤에야 모달이 닫히고 있었음.
+    // 이제 기다리지 않고 바로 닫고, 동기화는 백그라운드에서 진행함.
     try {
       isSaving = true;
-      if (saveBtn) saveBtn.innerText = '저장 중...';
 
-      if (editId) {
-        await setDoc(doc(db, "movieLogs", editId), recordData, { merge: true });
-      } else {
-        await addDoc(collection(db, "movieLogs"), recordData);
-      }
-    } catch (e) {
-      console.error("저장 중 오류 발생:", e);
-      Swal.fire({
-        title: 'Film Note',
-        text: '저장 과정에서 오류가 발생했습니다.',
-        icon: 'error',
-        confirmButtonText: '확인',
-        confirmButtonColor: '#f2ebd9'
+      const writePromise = editId
+        ? setDoc(doc(db, "movieLogs", editId), recordData, { merge: true })
+        : addDoc(collection(db, "movieLogs"), recordData);
+
+      // 실패했을 때만 알려주기 (오프라인이면 온라인 복귀 시 자동으로 동기화됨)
+      writePromise.catch(e => {
+        console.error("저장 중 오류 발생:", e);
+        Swal.fire({
+          title: 'Film Note',
+          text: '저장 내용을 서버에 반영하지 못했습니다. 네트워크 상태를 확인해주세요.',
+          icon: 'error',
+          confirmButtonText: '확인',
+          confirmButtonColor: '#f2ebd9'
+        });
       });
     } finally {
       isSaving = false;
@@ -1735,6 +1924,7 @@ window.deleteCurrentRecord = async function() {
     } catch (e) {}
   }
   const holidayMemCache = loadHolidayCache();
+  const holidayInFlight = {};   // 같은 달을 동시에 여러 번 요청하지 않도록
 
   async function fetchHolidays(year, month) {
     const formattedMonth = String(month + 1).padStart(2, '0');
@@ -1770,24 +1960,40 @@ window.deleteCurrentRecord = async function() {
     const cached = holidayMemCache[key];
 
     if (cached) {
-      // 캐시 있음: 즉시 사용, 백그라운드에서 조용히 최신화만 시도
-      fetchHolidays(year, month).then(fresh => {
-        const changed = JSON.stringify(fresh) !== JSON.stringify(cached.list);
-        holidayMemCache[key] = { list: fresh, ts: Date.now() };
-        saveHolidayCache(holidayMemCache);
-        if (changed) onUpdated(fresh);
-      }).catch(() => {});
+      // 예전에는 캐시가 있어도 렌더할 때마다 API를 다시 불렀는데,
+      // renderCalendar()는 기록이 바뀔 때마다 실행되다 보니 불필요한 요청이 계속 나갔음.
+      // 지난 달의 공휴일은 바뀌지 않으므로 아예 다시 부르지 않고,
+      // 이번 달 이후만 30일이 지난 캐시일 때 한 번씩 갱신함.
+      const now = new Date();
+      const isPast = (year < now.getFullYear()) ||
+                     (year === now.getFullYear() && month < now.getMonth());
+      const isStale = (Date.now() - (cached.ts || 0)) > 30 * 24 * 60 * 60 * 1000;
+
+      if (!isPast && isStale && !holidayInFlight[key]) {
+        holidayInFlight[key] = true;
+        fetchHolidays(year, month).then(fresh => {
+          const changed = JSON.stringify(fresh) !== JSON.stringify(cached.list);
+          holidayMemCache[key] = { list: fresh, ts: Date.now() };
+          saveHolidayCache(holidayMemCache);
+          if (changed) onUpdated(fresh);
+        }).catch(() => {}).finally(() => { holidayInFlight[key] = false; });
+      }
       return cached.list;
     }
 
+    if (holidayInFlight[key]) return [];   // 이미 요청 중이면 중복 호출 방지
+
     // 캐시 없음: 우선 빈 배열로 즉시 렌더링, 응답 오면 업데이트
+    holidayInFlight[key] = true;
     fetchHolidays(year, month).then(fresh => {
       holidayMemCache[key] = { list: fresh, ts: Date.now() };
       saveHolidayCache(holidayMemCache);
       onUpdated(fresh);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { holidayInFlight[key] = false; });
     return [];
   }
+
+  let lastRenderedMonthKey = null;
 
   function renderCalendar() {
     const year = currentDate.getFullYear();
@@ -1811,6 +2017,7 @@ window.deleteCurrentRecord = async function() {
 
     const firstDay = new Date(year, month, 1).getDay();
     const lastDate = new Date(year, month + 1, 0).getDate();
+    const holidaySet = new Set(holidayList);   // includes() 반복 대신 Set 조회
 
     for (let i = 0; i < firstDay; i++) gridHtml += `<div class="empty-cell"></div>`;
 
@@ -1822,12 +2029,12 @@ window.deleteCurrentRecord = async function() {
 
     for (let date = 1; date <= lastDate; date++) {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(date).padStart(2, '0')}`;
-      const logs = movieLogs.filter(l => l.date === dateStr);
+      const logs = logsOfDate(dateStr);
     // 요일 및 공휴일 판별 (API 활용)
       const targetDate = new Date(year, month, date);
       const dayOfWeek = targetDate.getDay(); // 0: 일요일, 6: 토요일
 
-      const isHoliday = holidayList.includes(dateStr);
+      const isHoliday = holidaySet.has(dateStr);
 
       let dateColorClass = '';
       if (dayOfWeek === 0 || isHoliday) {
@@ -1863,7 +2070,8 @@ window.deleteCurrentRecord = async function() {
         const mainLog = logs.find(l => l.isMainPoster) || sortedLogs[0];
         
         if (mainLog && mainLog.poster && mainLog.poster !== DEFAULT_POSTER) {
-          styleAttr = `style="background-image: url('${mainLog.poster}');"`;
+          // 달력 칸은 실제로 60px 안팎이라 w185면 충분함 (원본 w780 대비 데이터가 1/10 수준)
+          styleAttr = `style="background-image: url('${posterAt(mainLog.poster, 'w185')}');"`;
         } else {
           extraClass = 'has-record-no-poster';
         }
@@ -1881,12 +2089,16 @@ window.deleteCurrentRecord = async function() {
       `;
     }
 
-    // 완성된 달력을 한 번에 교체하면서 살짝 페이드인 (내용이 뚝뚝 끊겨 나타나지 않도록)
-    grid.style.opacity = '0';
+    // 달을 넘길 때만 페이드인. (기록이 저장/수정될 때마다 화면이 깜빡이던 것 방지)
+    const monthKey = `${year}-${month}`;
+    const monthChanged = lastRenderedMonthKey !== monthKey;
+    lastRenderedMonthKey = monthKey;
+
+    if (monthChanged) grid.style.opacity = '0';
     grid.innerHTML = gridHtml;
-    requestAnimationFrame(() => {
-      grid.style.opacity = '1';
-    });
+    if (monthChanged) {
+      requestAnimationFrame(() => { grid.style.opacity = '1'; });
+    }
 
     document.getElementById('monthlyTotalCost').innerText = monthlyTotalCost.toLocaleString();
 
@@ -1895,7 +2107,7 @@ window.deleteCurrentRecord = async function() {
     document.getElementById('monthlyTotalTime').innerText = hours > 0 ? `${hours}시간 ${mins}분` : `${mins}분`;
 
     const summaryText = document.getElementById('month-summary');
-    if (!currentUser) {
+    if (!currentUser && !usingCachedLogs) {
       summaryText.innerText = '로그인하면 관람 기록을 볼 수 있어요.';
     } else {
       // "총 n편" 부분만 색/굵기로 강조
@@ -1981,7 +2193,7 @@ if (calendarBody) {
   }
 
   function dndLogsOf(dateStr) {
-    return movieLogs.filter(l => l.date === dateStr);
+    return logsOfDate(dateStr);
   }
 
   function dndBegin(fromDate, x, y) {
@@ -1999,7 +2211,7 @@ if (calendarBody) {
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
     if (mainLog && mainLog.poster && mainLog.poster !== DEFAULT_POSTER) {
-      ghost.style.backgroundImage = "url('" + mainLog.poster + "')";
+      ghost.style.backgroundImage = "url('" + posterAt(mainLog.poster, 'w185') + "')";
     }
     if (logs.length > 1) {
       ghost.innerHTML = '<span class="drag-ghost-count">' + logs.length + '</span>';
@@ -2104,7 +2316,8 @@ if (calendarBody) {
 
     // ---------- 마우스 ----------
     dndGrid.addEventListener('mousedown', (e) => {
-      if (e.button !== 0 || !currentUser) return;
+      if (e.button !== 0) return;
+      if (!currentUser && !localStorage.getItem('filmNote_user')) return;
       const cell = e.target.closest('.day-cell');
       if (!cell || !cell.dataset.date) return;
       if (dndLogsOf(cell.dataset.date).length === 0) return;
@@ -2137,7 +2350,8 @@ if (calendarBody) {
 
     // ---------- 터치 ----------
     dndGrid.addEventListener('touchstart', (e) => {
-      if (!currentUser || e.touches.length !== 1) return;
+      if (e.touches.length !== 1) return;
+      if (!currentUser && !localStorage.getItem('filmNote_user')) return;
       const cell = e.target.closest('.day-cell');
       if (!cell || !cell.dataset.date) return;
       if (dndLogsOf(cell.dataset.date).length === 0) return;
@@ -2200,7 +2414,7 @@ if (calendarBody) {
     const sorted = sortLogsByTime(logs);
 
     const itemsHtml = sorted.map(log => {
-      const poster = log.poster || DEFAULT_POSTER;
+      const poster = posterAt(log.poster || DEFAULT_POSTER, 'w185');
       const timeStr = (log.startTime || log.endTime)
         ? `${log.startTime || ''} ~ ${log.endTime || ''}`
         : '시간 미입력';
@@ -2278,7 +2492,7 @@ if (calendarBody) {
   }
 
   window.handleDayDrop = async function(fromDate, toDate) {
-    if (!currentUser) return;
+    if (!(await requireLogin())) return;
     const logs = dndLogsOf(fromDate);
     if (logs.length === 0) return;
 
@@ -2311,44 +2525,49 @@ if (calendarBody) {
 
   async function moveLogsToDate(ids, toDate) {
     // 옮겨가는 날짜에 이미 기록이 있으면, 대표 포스터가 둘이 되지 않게 해제해서 옮김
-    const targetHasLogs = movieLogs.some(l => l.date === toDate);
+    const targetHasLogs = logsOfDate(toDate).length > 0;
 
-    try {
-      const batch = writeBatch(db);
-      ids.forEach(id => {
-        const payload = { date: toDate };
-        if (targetHasLogs) payload.isMainPoster = false;
-        batch.update(doc(db, "movieLogs", id), payload);
-      });
-      await batch.commit();
+    const batch = writeBatch(db);
+    ids.forEach(id => {
+      const payload = { date: toDate };
+      if (targetHasLogs) payload.isMainPoster = false;
+      batch.update(doc(db, "movieLogs", id), payload);
+    });
 
-      // 옮긴 날짜가 다른 달이면 그 달로 이동해서 결과를 바로 볼 수 있게
-      const [ty, tm] = toDate.split('-').map(Number);
-      if (currentDate.getFullYear() !== ty || currentDate.getMonth() !== tm - 1) {
-        currentDate = new Date(ty, tm - 1, 1);
-      }
-      renderCalendar();
-
-      Swal.fire({
-        title: 'Film Note',
-        html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
-        icon: 'success',
-        confirmButtonText: '확인',
-        confirmButtonColor: '#f2ebd9',
-        timer: 1600,
-        timerProgressBar: true
-      });
-    } catch (e) {
+    // 서버 응답을 기다리지 않음 (로컬 반영 + onSnapshot으로 화면은 바로 갱신됨)
+    batch.commit().catch(e => {
       console.error("날짜 이동 실패:", e);
       Swal.fire({
         title: 'Film Note',
-        text: '날짜를 옮기는 중 오류가 발생했습니다.',
+        text: '날짜 이동을 서버에 반영하지 못했습니다. 네트워크 상태를 확인해주세요.',
         icon: 'error',
         confirmButtonText: '확인',
         confirmButtonColor: '#f2ebd9'
       });
+    });
+
+    // 옮긴 날짜가 다른 달이면 그 달로 이동해서 결과를 바로 볼 수 있게
+    const [ty, tm] = toDate.split('-').map(Number);
+    if (currentDate.getFullYear() !== ty || currentDate.getMonth() !== tm - 1) {
+      currentDate = new Date(ty, tm - 1, 1);
     }
+    renderCalendar();
+
+    Swal.fire({
+      title: 'Film Note',
+      html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
+      icon: 'success',
+      confirmButtonText: '확인',
+      confirmButtonColor: '#f2ebd9',
+      timer: 1600,
+      timerProgressBar: true
+    });
   }
+
+  // 화면을 다 그린 뒤에 Firebase를 로드하기 시작 (첫 페인트를 막지 않도록)
+  let firebaseInitPromise = initFirebase().catch(e => {
+    console.error("Firebase 초기화 완전 실패 (재시도 소진):", e);
+  });
 
 // 안드로이드 기기 판별 함수
   function isAndroid() {
