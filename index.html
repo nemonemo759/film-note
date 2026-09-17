@@ -2369,6 +2369,11 @@ if (calendarBody) {
     });
 
     document.body.classList.remove('dnd-active');
+    // 드래그 중 달을 넘겨서(엣지 자동 넘김) 시작 칸이 숨김 보관함에 실제로
+    // 대피된 적이 있을 때만 복원용 재렌더링이 필요함. 평범한 같은 달 드래그는
+    // 애초에 대피가 일어나지 않으므로, 여기서 무조건 다시 그리면 곧바로 이어질
+    // (실제 이동 결과가 반영되는) 재렌더링과 겹쳐 화면이 깜빡이는 원인이 됐음.
+    const neededRestore = dndHolder.children.length > 0;
     dndHolder.innerHTML = ''; // 보관함에 대피시켜뒀을 수도 있는 옛 노드 정리
     dnd.active = false;
     dnd.pending = false;
@@ -2378,10 +2383,7 @@ if (calendarBody) {
     dnd.fromDate = null;
     dnd.sourceNode = null;
 
-    // 드래그를 시작한 칸을 숨김 보관함으로 옮겨뒀던 걸 방금 비웠으므로,
-    // (성공/취소 여부와 상관없이) 달력을 다시 그려서 그 칸을 실제 화면에 복원함.
-    // 안 그러면 "취소"를 눌렀을 때 그 날짜 칸이 새로고침 전까지 빈 채로 남아있었음.
-    renderCalendar();
+    if (neededRestore) renderCalendar();
   }
 
   function dndFinish(x, y) {
@@ -2646,12 +2648,17 @@ if (calendarBody) {
       });
     });
 
-    // 옮긴 날짜가 다른 달이면 그 달로 이동해서 결과를 바로 볼 수 있게
+    // 옮긴 날짜가 다른 달이면 그 달로 화면을 전환. 같은 달 안에서 옮긴 거라면
+    // 여기서 다시 그리지 않음 — 이 시점엔 아직 실제 데이터(movieLogs)가
+    // 갱신되기 전이라, 옛날 상태로 한 번 그려졌다가 바로 뒤이어 onSnapshot이
+    // 진짜 결과를 반영하며 또 한 번 그려지면서 화면이 두 번 깜빡이는
+    // 원인이었음. 같은 달이면 onSnapshot에 의한 한 번의 재렌더링만으로 충분함.
     const [ty, tm] = toDate.split('-').map(Number);
-    if (currentDate.getFullYear() !== ty || currentDate.getMonth() !== tm - 1) {
+    const monthChangedForView = currentDate.getFullYear() !== ty || currentDate.getMonth() !== tm - 1;
+    if (monthChangedForView) {
       currentDate = new Date(ty, tm - 1, 1);
+      renderCalendar();
     }
-    renderCalendar();
 
     Swal.fire({
       title: 'Film Note',
