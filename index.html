@@ -50,6 +50,7 @@
       display: grid; 
       grid-template-columns: repeat(7, 1fr); 
       gap: 5px; 
+      transition: opacity 0.25s ease;
     }
     .day-name { text-align: center; font-weight: 600; padding: 4px 0; color: #a39580; font-size: 0.8rem; }
     
@@ -481,18 +482,6 @@
   let unsubscribeSnapshot = null;
   let isSaving = false;
 
-  // 로그인 기록이 있으면, 첫 화면을 그리기 전에 실제 데이터가 도착할 짧은 기회를 줌
-  // (달력과 영화 기록이 따로따로 뜨지 않고 한 번에 같이 뜨게 하기 위함)
-  let firstDataResolved = false;
-  let resolveFirstData;
-  const firstDataPromise = new Promise((resolve) => { resolveFirstData = resolve; });
-  function resolveFirstDataOnce() {
-    if (!firstDataResolved) {
-      firstDataResolved = true;
-      resolveFirstData();
-    }
-  }
-
   (function restoreCachedUser() {
     const cachedUser = localStorage.getItem('filmNote_user');
     if (cachedUser) {
@@ -557,7 +546,6 @@
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         movieLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderCalendar();
-        resolveFirstDataOnce();
       }, (err) => console.error("Firestore 수신 오류:", err));
     } else {
       localStorage.removeItem('filmNote_user');
@@ -565,7 +553,6 @@
       userProfile.style.display = 'none';
       movieLogs = [];
       renderCalendar();
-      resolveFirstDataOnce();
     }
   });
 
@@ -1242,16 +1229,16 @@ window.deleteCurrentRecord = async function() {
 
     document.getElementById('calendar-title').innerText = `${year}. ${month + 1}`;
     const grid = document.getElementById('calendar-grid');
-    grid.innerHTML = '';
+    let gridHtml = '';
 
     ['일','월','화','수','목','금','토'].forEach(n => {
-      grid.innerHTML += `<div class="day-name">${n}</div>`;
+      gridHtml += `<div class="day-name">${n}</div>`;
     });
 
     const firstDay = new Date(year, month, 1).getDay();
     const lastDate = new Date(year, month + 1, 0).getDate();
 
-    for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div class="empty-cell"></div>`;
+    for (let i = 0; i < firstDay; i++) gridHtml += `<div class="empty-cell"></div>`;
 
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -1312,13 +1299,20 @@ window.deleteCurrentRecord = async function() {
         }
       }
 
-      grid.innerHTML += `
+      gridHtml += `
         <div class="day-cell ${isToday} ${extraClass}" ${styleAttr} onclick="window.handleDateClick('${dateStr}')">
           <span class="day-number">${date}</span>
           ${badgeHtml}
         </div>
       `;
     }
+
+    // 완성된 달력을 한 번에 교체하면서 살짝 페이드인 (내용이 뚝뚝 끊겨 나타나지 않도록)
+    grid.style.opacity = '0';
+    grid.innerHTML = gridHtml;
+    requestAnimationFrame(() => {
+      grid.style.opacity = '1';
+    });
 
     document.getElementById('monthlyTotalCost').innerText = monthlyTotalCost.toLocaleString();
 
@@ -1343,17 +1337,9 @@ window.deleteCurrentRecord = async function() {
     }
   });
 
-  // 이전에 로그인했던 기록이 있으면, 실제 데이터가 도착할 때까지 최대 400ms만 잠깐 기다렸다가
-  // 달력과 영화 기록을 한 번에 그림 (그 안에 안 오면 그냥 지금처럼 진행)
-  const hadCachedUser = !!localStorage.getItem('filmNote_user');
-  if (hadCachedUser) {
-    Promise.race([
-      firstDataPromise,
-      new Promise((resolve) => setTimeout(resolve, 400))
-    ]).then(() => renderCalendar());
-  } else {
-    renderCalendar();
-  }
+  // 항상 즉시 렌더링: 달력 구조는 바로 뜨고, 실제 기록 데이터는 도착하는 대로
+  // 부드럽게 페이드인되도록 처리함 (renderCalendar 내부의 opacity 트랜지션 참고)
+  renderCalendar();
 
 // 모바일 좌우 스와이프 달력 넘김 기능 추가
 const calendarBody = document.getElementById('calendar-grid');
