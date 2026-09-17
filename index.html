@@ -85,7 +85,12 @@
     .day-number {
       font-size: 0.75rem; color: #333; font-weight: 700;
       display: inline-block; padding: 1px 4px; border-radius: 4px;
-      background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(2px);
+      /* 예전엔 backdrop-filter: blur(2px)를 썼는데, 한 달 그리드에 이 배지가
+         최대 40개 가까이 있다 보니 팝업이 뜰 때(화면 위에 새 반투명 레이어가
+         덮일 때)마다 브라우저가 이 블러들을 전부 다시 계산해야 해서 특히
+         모바일에서 화면 전체가 지직거리는 원인이 됐음. 블러 없이 배경을
+         살짝 더 진하게 줘서 비슷한 가독성을 유지하면서 이 문제를 없앰. */
+      background: rgba(255, 255, 255, 0.94);
       position: relative; z-index: 2;
     }
     .empty-cell { aspect-ratio: 1 / 1.35; height: auto; background: transparent; }
