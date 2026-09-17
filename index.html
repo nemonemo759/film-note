@@ -41,6 +41,12 @@
       font-size: 0.8rem; color: #666; transition: all 0.2s;
     }
     .btn-circle:hover { background: #f8f8f8; }
+    .btn-tool {
+      padding: 0 12px; height: 32px; border-radius: 10px; border: 1px solid #dcd3be;
+      background: #fff; cursor: pointer; display: flex; align-items: center;
+      font-size: 0.78rem; font-weight: 600; color: #555; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-tool:hover { background: #f8f8f8; }
     .today-btn {
       position: absolute; right: 22px; bottom: 20px;
       padding: 7px 16px; border-radius: 20px; border: 1px solid #dcd3be;
@@ -179,6 +185,9 @@
     .form-group { margin-bottom: 12px; text-align: left; position: relative; }
     .form-group label { display: block; font-size: 0.78rem; font-weight: 700; margin-bottom: 4px; color: #666; }
     .input-box { width: 100%; padding: 10px 12px; border: 1px solid #e2e2e2; border-radius: 8px; font-size: 0.88rem; }
+    .cinema-input-row { display: flex; gap: 8px; }
+    .cinema-input-row .input-box { flex: 1; min-width: 0; }
+    .cinema-input-row select.input-box { flex: 0 0 38%; background: #fff; }
     
     .autocomplete-list {
       position: absolute; top: 100%; left: 0; right: 0;
@@ -276,7 +285,48 @@
   /* 토요일 (파란색) */
   .text-blue, .text-blue .day-number {
     color: #1890ff !important;
-  }    
+  }
+
+  /* 통계/검색 모달 공통 */
+  .stat-block { margin-bottom: 14px; }
+  .stat-block-title { font-weight: 700; font-size: 0.88rem; color: #b58d53; margin-bottom: 8px; }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; font-size: 0.85rem; border-bottom: 1px dashed #eee8dc;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-rank { color: #a39580; font-weight: 700; margin-right: 8px; width: 18px; display: inline-block; }
+  .stat-name { color: #333; font-weight: 600; }
+  .stat-count { color: #b58d53; font-weight: 700; }
+  .empty-stat { color: #999; font-size: 0.82rem; text-align: center; padding: 10px 0; }
+
+  .recap-summary-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;
+  }
+  .recap-summary-item {
+    background: #f4efe4; border-radius: 10px; padding: 10px 6px; text-align: center;
+  }
+  .recap-summary-num { font-size: 1.05rem; font-weight: 800; color: #2b2b2b; }
+  .recap-summary-label { font-size: 0.7rem; color: #8e8370; margin-top: 2px; }
+
+  .month-bar-chart {
+    display: flex; align-items: flex-end; gap: 4px; height: 90px;
+    padding: 8px 4px 0 4px; margin-bottom: 10px; border-bottom: 1px solid #eee8dc;
+  }
+  .month-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+  .month-bar-count { font-size: 0.62rem; font-weight: 700; color: #b58d53; margin-bottom: 3px; min-height: 11px; line-height: 1; }
+  .month-bar-fill { width: 60%; background: #b58d53; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .month-bar-label { font-size: 0.65rem; color: #999; margin-top: 4px; }
+
+  .promo-row { margin-bottom: 10px; }
+  .promo-row:last-child { margin-bottom: 0; }
+  .promo-row-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.82rem; margin-bottom: 4px; }
+  .promo-name { color: #333; font-weight: 600; }
+  .promo-pct { color: #b58d53; font-weight: 700; font-size: 0.8rem; }
+  .promo-bar-track { background: #f0ebe0; border-radius: 6px; height: 8px; overflow: hidden; }
+  .promo-bar-fill { background: #b58d53; height: 100%; border-radius: 6px; }
+
+  .search-result-empty { text-align: center; color: #999; font-size: 0.85rem; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -298,6 +348,8 @@
     <div class="nav-btns">
       <button class="btn-circle" onclick="window.changeMonth(-1)">&lt;</button>
       <button class="btn-circle" onclick="window.changeMonth(1)">&gt;</button>
+      <button class="btn-tool" onclick="window.openSearchModal()">🔍 검색</button>
+      <button class="btn-tool" onclick="window.openStatsModal()">📊 통계</button>
     </div>
     <div class="summary-text" id="month-summary">불러오는 중...</div>
     <button class="today-btn" onclick="window.goToday()">오늘</button>
@@ -381,7 +433,15 @@
     </div>
     <div class="form-group">
       <label>관람 영화관</label>
-      <input type="text" class="input-box" id="cinema" placeholder="예: CGV 안산" autocomplete="off">
+      <div class="cinema-input-row">
+        <select class="input-box" id="cinemaChain" onchange="window.handleChainChange()">
+          <option value="CGV">CGV</option>
+          <option value="롯데시네마">롯데시네마</option>
+          <option value="메가박스">메가박스</option>
+          <option value="CineQ">CineQ</option>
+        </select>
+        <input type="text" class="input-box" id="cinemaBranch" placeholder="지점명 (예: 안산)" autocomplete="off">
+      </div>
     </div>
     
     <div class="form-group">
@@ -409,15 +469,6 @@
     <div class="form-group">
       <label>프로모션 여부</label>
       <select class="input-box" id="promotion">
-        <option value="없음">없음</option>
-        <option value="조조">조조</option>
-        <option value="관람권">관람권</option>
-        <option value="문화가 있는 날">문화가 있는 날</option>
-        <option value="할인권">할인권</option>
-        <option value="빵원티켓">빵원티켓</option>
-        <option value="무비싸다구">무비싸다구</option>
-        <option value="서프라이즈 쿠폰">서프라이즈 쿠폰</option>
-        <option value="스피드 쿠폰">스피드 쿠폰</option>
       </select>
     </div>
 
@@ -430,6 +481,50 @@
       <input type="text" class="input-box" id="movieMetaPreview" readonly placeholder="영화 선택 시 정보 표시됨" style="background:#f9f9f9;">
     </div>
     <button class="btn-submit" id="saveBtn" onclick="window.saveRecord()">기록 저장하기</button>
+  </div>
+</div>
+
+<!-- 검색 모달 -->
+<div class="modal-overlay" id="searchModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>영화 검색</h3>
+      <button class="close-btn" onclick="window.closeModal('searchModal')">&times;</button>
+    </div>
+    <div class="form-group" style="margin-bottom: 14px;">
+      <input type="text" class="input-box" id="searchInput" placeholder="영화 제목으로 검색..." autocomplete="off" oninput="window.handleSearchInput(this.value)">
+    </div>
+    <div id="searchResultsContainer"></div>
+  </div>
+</div>
+
+<!-- 통계 모달 -->
+<div class="modal-overlay" id="statsModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="statsModalTitle">감독 / 영화관 통계</h3>
+      <button class="close-btn" onclick="window.closeModal('statsModal')">&times;</button>
+    </div>
+
+    <div id="statsMainView">
+      <div class="stat-block">
+        <div class="stat-block-title">🎬 많이 본 감독 Top 5</div>
+        <div id="directorStatsList"></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-block-title">🍿 자주 간 영화관 Top 5</div>
+        <div id="cinemaStatsList"></div>
+      </div>
+      <button class="btn-submit" style="background:#b58d53;" onclick="window.openRecapView()">📅 연말결산 보기</button>
+    </div>
+
+    <div id="statsRecapView" style="display:none;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+        <button class="btn-circle" onclick="window.backToStatsMain()">&lt;</button>
+        <select class="input-box" id="recapYearSelect" onchange="window.renderRecap()" style="flex:1;"></select>
+      </div>
+      <div id="recapContent"></div>
+    </div>
   </div>
 </div>
 
@@ -483,6 +578,52 @@
   let currentUser = null;
   let unsubscribeSnapshot = null;
   let isSaving = false;
+
+  // ===================== 영화관 체인 / 프로모션 옵션 =====================
+  const CINEMA_CHAINS = ['CGV', '롯데시네마', '메가박스', 'CineQ'];
+
+  const PROMOTION_OPTIONS_BY_CHAIN = {
+    'CGV': ['없음', '조조 할인', '문화가 있는 날', '관람권', '할인권', '스피드 쿠폰', '서프라이즈 쿠폰'],
+    '롯데시네마': ['없음', '조조 할인', '문화가 있는 날', '관람권', '할인권', '무비싸다구'],
+    '메가박스': ['없음', '조조 할인', '문화가 있는 날', '관람권', '할인권', '빵원티켓플러스'],
+    'CineQ': ['없음', '조조 할인', '문화가 있는 날', '관람권', '할인권', '0원딜']
+  };
+
+  // "관람 영화관" 칸에 저장돼있던 문자열(예: "CGV 인천")을
+  // 체인 선택박스 값 + 지점명 입력값으로 나눠주는 함수 (수정 화면 진입 시 사용)
+  function parseCinemaString(raw) {
+    const str = (raw || '').trim();
+    for (const chain of CINEMA_CHAINS) {
+      if (str === chain) return { chain, branch: '' };
+      if (str.startsWith(chain)) {
+        const branch = str.slice(chain.length).replace(/^\s+/, '').trim();
+        return { chain, branch };
+      }
+    }
+    // 등록된 체인 이름으로 시작하지 않는 옛날 기록은
+    // 일단 CGV로 두고 전체 문자열을 지점명 칸에 그대로 넣어줌 (데이터 유실 방지)
+    return { chain: CINEMA_CHAINS[0], branch: str };
+  }
+
+  // 선택된 체인에 맞는 프로모션 옵션을 select에 채워 넣음.
+  // preserveValue가 그 체인의 목록에 없는 값이면(예: 옛날 기록에 남아있던 "빵원티켓")
+  // 목록 맨 위에 추가해서 값이 사라지지 않도록 함.
+  function renderPromotionOptions(chain, preserveValue) {
+    const select = document.getElementById('promotion');
+    const options = (PROMOTION_OPTIONS_BY_CHAIN[chain] || PROMOTION_OPTIONS_BY_CHAIN['CGV']).slice();
+
+    if (preserveValue && preserveValue !== '없음' && !options.includes(preserveValue)) {
+      options.push(preserveValue);
+    }
+
+    select.innerHTML = options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
+    select.value = preserveValue && options.includes(preserveValue) ? preserveValue : '없음';
+  }
+
+  window.handleChainChange = function() {
+    const chain = document.getElementById('cinemaChain').value;
+    renderPromotionOptions(chain, '없음');
+  };
 
   (function restoreCachedUser() {
     const cachedUser = localStorage.getItem('filmNote_user');
@@ -585,12 +726,12 @@
   };
 
   window.closeAllModals = function() {
-    ['listModal', 'detailModal', 'addModal', 'posterModal'].forEach(id => window.closeModal(id));
+    ['listModal', 'detailModal', 'addModal', 'posterModal', 'searchModal', 'statsModal'].forEach(id => window.closeModal(id));
   };
 
   window.openPosterModal = function() {
     let currentPosterSrc = document.getElementById('detailPoster').src;
-    if (!currentPosterSrc || currentPosterSrc.includes('No+Poster')) return;
+    if (!currentPosterSrc || currentPosterSrc.startsWith('data:image/svg+xml')) return;
 
     if (currentPosterSrc.includes('image.tmdb.org')) {
       currentPosterSrc = currentPosterSrc.replace(/\/t\/p\/w\d+/, '/t/p/original');
@@ -599,6 +740,303 @@
     const enlargedImg = document.getElementById('enlargedPoster');
     enlargedImg.src = currentPosterSrc;
     document.getElementById('posterModal').style.display = 'flex';
+  };
+
+  // ===================== 검색 =====================
+  window.openSearchModal = function() {
+    if (!currentUser) {
+      return Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요한 서비스입니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchResultsContainer').innerHTML = '<div class="search-result-empty">영화 제목을 입력해보세요</div>';
+    document.getElementById('searchModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('searchInput').focus(), 50);
+  };
+
+  window.handleSearchInput = function(val) {
+    const query = val.trim().toLowerCase();
+    const container = document.getElementById('searchResultsContainer');
+
+    if (!query) {
+      container.innerHTML = '<div class="search-result-empty">영화 제목을 입력해보세요</div>';
+      return;
+    }
+
+    const matched = movieLogs
+      .filter(l => (l.title || '').toLowerCase().includes(query))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+    if (matched.length === 0) {
+      container.innerHTML = '<div class="search-result-empty">검색 결과가 없어요</div>';
+      return;
+    }
+
+    container.innerHTML = matched.map(log => {
+      const poster = log.poster || DEFAULT_POSTER;
+      return `
+        <div class="movie-item-card" onclick="window.goToSearchResult('${log.date}', '${log.id}')">
+          <img src="${poster}" class="item-poster" onerror="this.onerror=null; this.src='${DEFAULT_POSTER}';">
+          <div class="item-info">
+            <div class="item-title">${log.title}</div>
+            <div class="item-sub">${log.date} · ${log.cinema || '영화관 미입력'}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  window.goToSearchResult = function(dateStr, id) {
+    window.closeModal('searchModal');
+    const [y, m, d] = dateStr.split('-').map(Number);
+    currentDate = new Date(y, m - 1, d);
+    renderCalendar();
+    window.openDetailModal(id);
+  };
+
+  // ===================== 통계 / 연말결산 =====================
+  function computeLogMinutes(log) {
+    if (!log.startTime || !log.endTime) return 0;
+    const [sH, sM] = log.startTime.split(':').map(Number);
+    const [eH, eM] = log.endTime.split(':').map(Number);
+    if (isNaN(sH) || isNaN(eH)) return 0;
+    const startMins = sH * 60 + (sM || 0);
+    let endMins = eH * 60 + (eM || 0);
+    if (endMins < startMins) endMins += 24 * 60;
+    return endMins - startMins;
+  }
+
+  function topCounts(logs, field, limit) {
+    const counts = {};
+    logs.forEach(l => {
+      const val = (l[field] || '').trim();
+      if (!val || val === '정보 없음') return;
+      // 감독은 콤마로 여러 명 들어있을 수 있으니 각각 분리해서 집계
+      const names = field === 'director' ? val.split(',').map(s => s.trim()).filter(Boolean) : [val];
+      names.forEach(name => {
+        counts[name] = (counts[name] || 0) + 1;
+      });
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, limit);
+  }
+
+  // 영화관 이름은 공백 유무 때문에 "CGV 인천"과 "CGV인천"처럼 같은 곳인데
+  // 다르게 집계되는 문제가 있어서, 공백을 제거한 값으로 묶어서 집계함.
+  // (실제 저장된 값은 그대로 두고, 통계 낼 때만 같은 곳으로 판단)
+  function topCinemaCounts(logs, limit) {
+    const counts = {};        // normKey -> count
+    const displayNames = {};  // normKey -> { 원래표기: 등장횟수 }
+
+    logs.forEach(l => {
+      const raw = (l.cinema || '').trim();
+      if (!raw || raw === '정보 없음') return;
+
+      const key = raw.replace(/\s+/g, ''); // 공백 제거해서 비교
+      counts[key] = (counts[key] || 0) + 1;
+
+      if (!displayNames[key]) displayNames[key] = {};
+      displayNames[key][raw] = (displayNames[key][raw] || 0) + 1;
+    });
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([key, cnt]) => {
+        // 여러 표기 중 대표 이름 고르기: 띄어쓰기가 들어간 표기를 우선하고,
+        // (예: "CGV 인천" > "CGV인천") 그 중에서 가장 많이 쓰인 걸로 선택.
+        // 띄어쓰기 있는 표기가 하나도 없으면 그냥 가장 많이 쓰인 표기를 사용.
+        const variants = Object.entries(displayNames[key]).sort((a, b) => b[1] - a[1]);
+        const spacedVariants = variants.filter(([name]) => /\s/.test(name));
+        const bestName = (spacedVariants[0] || variants[0])[0];
+        return [bestName, cnt];
+      });
+  }
+
+  // 프로모션 별 활용 비중 계산 (건수 + 전체 대비 비율)
+  function promotionBreakdown(logs) {
+    const counts = {};
+    let total = 0;
+
+    logs.forEach(l => {
+      const val = (l.promotion || '').trim() || '없음';
+      counts[val] = (counts[val] || 0) + 1;
+      total++;
+    });
+
+    if (total === 0) return [];
+
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, cnt]) => ({
+        name,
+        cnt,
+        pct: Math.round((cnt / total) * 1000) / 10
+      }));
+  }
+
+  function renderStatRows(containerId, entries, unit) {
+    const container = document.getElementById(containerId);
+    if (entries.length === 0) {
+      container.innerHTML = '<div class="empty-stat">아직 데이터가 없어요</div>';
+      return;
+    }
+    container.innerHTML = entries.map(([name, count], i) => `
+      <div class="stat-row">
+        <span><span class="stat-rank">${i + 1}</span><span class="stat-name">${name}</span></span>
+        <span class="stat-count">${count}${unit}</span>
+      </div>
+    `).join('');
+  }
+
+  window.openStatsModal = function() {
+    if (!currentUser) {
+      return Swal.fire({
+        title: 'Film Note',
+        text: '로그인이 필요한 서비스입니다.',
+        icon: 'warning',
+        confirmButtonText: '확인',
+        confirmButtonColor: '#f2ebd9'
+      });
+    }
+    renderStatRows('directorStatsList', topCounts(movieLogs, 'director', 5), '편');
+    renderStatRows('cinemaStatsList', topCinemaCounts(movieLogs, 5), '번');
+
+    document.getElementById('statsModalTitle').innerText = '감독 / 영화관 통계';
+    document.getElementById('statsMainView').style.display = 'block';
+    document.getElementById('statsRecapView').style.display = 'none';
+    document.getElementById('statsModal').style.display = 'flex';
+  };
+
+  window.openRecapView = function() {
+    const years = [...new Set(movieLogs.map(l => (l.date || '').substring(0, 4)).filter(Boolean))]
+      .sort((a, b) => b.localeCompare(a));
+    const currentYear = String(new Date().getFullYear());
+    if (!years.includes(currentYear)) years.unshift(currentYear);
+
+    const select = document.getElementById('recapYearSelect');
+    select.innerHTML = years.map(y => `<option value="${y}">${y}년</option>`).join('');
+
+    document.getElementById('statsModalTitle').innerText = '연말결산';
+    document.getElementById('statsMainView').style.display = 'none';
+    document.getElementById('statsRecapView').style.display = 'block';
+
+    window.renderRecap();
+  };
+
+  window.backToStatsMain = function() {
+    document.getElementById('statsModalTitle').innerText = '감독 / 영화관 통계';
+    document.getElementById('statsMainView').style.display = 'block';
+    document.getElementById('statsRecapView').style.display = 'none';
+  };
+
+  window.renderRecap = function() {
+    const year = document.getElementById('recapYearSelect').value;
+    const yearLogs = movieLogs.filter(l => (l.date || '').startsWith(year));
+    const content = document.getElementById('recapContent');
+
+    if (yearLogs.length === 0) {
+      content.innerHTML = '<div class="empty-stat">이 해에는 아직 기록이 없어요</div>';
+      return;
+    }
+
+    const totalCount = yearLogs.length;
+    const totalCost = yearLogs.reduce((sum, l) => sum + Number(l.ticketPrice || 0), 0);
+    const totalMinutes = yearLogs.reduce((sum, l) => sum + computeLogMinutes(l), 0);
+    const totalHours = Math.floor(totalMinutes / 60);
+
+    const monthlyCounts = new Array(12).fill(0);
+    yearLogs.forEach(l => {
+      const m = parseInt(l.date.split('-')[1], 10) - 1;
+      if (m >= 0 && m < 12) monthlyCounts[m]++;
+    });
+    const maxMonthCount = Math.max(...monthlyCounts, 1);
+
+    const mostExpensive = yearLogs.reduce((max, l) => Number(l.ticketPrice || 0) > Number(max?.ticketPrice || 0) ? l : max, null);
+    const longestLog = yearLogs.reduce((max, l) => computeLogMinutes(l) > computeLogMinutes(max || {}) ? l : max, null);
+
+    const topDirectors = topCounts(yearLogs, 'director', 3);
+    const topCinemas = topCinemaCounts(yearLogs, 3);
+    const promoData = promotionBreakdown(yearLogs);
+
+    content.innerHTML = `
+      <div class="recap-summary-grid">
+        <div class="recap-summary-item">
+          <div class="recap-summary-num">${totalCount}편</div>
+          <div class="recap-summary-label">총 관람</div>
+        </div>
+        <div class="recap-summary-item">
+          <div class="recap-summary-num">${totalCost.toLocaleString()}원</div>
+          <div class="recap-summary-label">총 지출</div>
+        </div>
+        <div class="recap-summary-item">
+          <div class="recap-summary-num">${totalHours}시간</div>
+          <div class="recap-summary-label">극장에서</div>
+        </div>
+      </div>
+
+      <div class="stat-block">
+        <div class="stat-block-title">📊 월별 관람 편수</div>
+        <div class="month-bar-chart">
+          ${monthlyCounts.map((c, i) => `
+            <div class="month-bar-col">
+              <div class="month-bar-count">${c > 0 ? c : ''}</div>
+              <div class="month-bar-fill" style="height:${c > 0 ? Math.max((c / maxMonthCount) * 100, 8) : 0}%;"></div>
+              <div class="month-bar-label">${i + 1}월</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="stat-block">
+        <div class="stat-block-title">🎬 이 해의 감독 Top 3</div>
+        ${topDirectors.length ? topDirectors.map(([name, cnt], i) => `
+          <div class="stat-row">
+            <span><span class="stat-rank">${i + 1}</span><span class="stat-name">${name}</span></span>
+            <span class="stat-count">${cnt}편</span>
+          </div>
+        `).join('') : '<div class="empty-stat">감독 정보가 있는 기록이 없어요</div>'}
+      </div>
+
+      <div class="stat-block">
+        <div class="stat-block-title">🍿 이 해의 영화관 Top 3</div>
+        ${topCinemas.length ? topCinemas.map(([name, cnt], i) => `
+          <div class="stat-row">
+            <span><span class="stat-rank">${i + 1}</span><span class="stat-name">${name}</span></span>
+            <span class="stat-count">${cnt}번</span>
+          </div>
+        `).join('') : '<div class="empty-stat">영화관 정보가 있는 기록이 없어요</div>'}
+      </div>
+
+      <div class="stat-block">
+        <div class="stat-block-title">🎟 프로모션 별 활용 비중</div>
+        ${promoData.length ? promoData.map(p => `
+          <div class="promo-row">
+            <div class="promo-row-top">
+              <span class="promo-name">${p.name}</span>
+              <span class="promo-pct">${p.cnt}회 · ${p.pct}%</span>
+            </div>
+            <div class="promo-bar-track"><div class="promo-bar-fill" style="width:${p.pct}%;"></div></div>
+          </div>
+        `).join('') : '<div class="empty-stat">프로모션 정보가 있는 기록이 없어요</div>'}
+      </div>
+
+      ${mostExpensive ? `
+      <div class="stat-block">
+        <div class="stat-block-title">💸 가장 비쌌던 영화</div>
+        <div class="stat-row"><span class="stat-name">${mostExpensive.title}</span><span class="stat-count">${Number(mostExpensive.ticketPrice || 0).toLocaleString()}원</span></div>
+      </div>` : ''}
+
+      ${longestLog && computeLogMinutes(longestLog) > 0 ? `
+      <div class="stat-block">
+        <div class="stat-block-title">⏱ 가장 길었던 영화</div>
+        <div class="stat-row"><span class="stat-name">${longestLog.title}</span><span class="stat-count">${longestLog.duration || Math.floor(computeLogMinutes(longestLog)/60) + '시간 ' + (computeLogMinutes(longestLog)%60) + '분'}</span></div>
+      </div>` : ''}
+    `;
   };
 
   window.handleDateClick = function(dateStr) {
@@ -736,7 +1174,10 @@
     document.getElementById('selectedDate').value = record.date;
 
     document.getElementById('movieTitle').value = record.title;
-    document.getElementById('cinema').value = record.cinema || '';
+
+    const { chain, branch } = parseCinemaString(record.cinema);
+    document.getElementById('cinemaChain').value = chain;
+    document.getElementById('cinemaBranch').value = branch;
 
     if (record.ticketPrice !== undefined && record.ticketPrice !== null && record.ticketPrice !== '') {
       document.getElementById('ticketPrice').value = Number(record.ticketPrice).toLocaleString();
@@ -744,7 +1185,7 @@
       document.getElementById('ticketPrice').value = '';
     }
 
-    document.getElementById('promotion').value = record.promotion || '없음';
+    renderPromotionOptions(chain, record.promotion || '없음');
     document.getElementById('posterUrlVal').value = record.poster || DEFAULT_POSTER;
 
     if (record.startTime && record.startTime.includes(':')) {
@@ -842,9 +1283,10 @@ window.deleteCurrentRecord = async function() {
     document.getElementById('editRecordId').value = '';
 
     document.getElementById('movieTitle').value = '';
-    document.getElementById('cinema').value = '';
+    document.getElementById('cinemaChain').value = 'CGV';
+    document.getElementById('cinemaBranch').value = '';
+    renderPromotionOptions('CGV', '없음');
     document.getElementById('ticketPrice').value = '';
-    document.getElementById('promotion').value = '없음';
     document.getElementById('startH').value = '';
     document.getElementById('startM').value = '';
     document.getElementById('endH').value = '';
@@ -1101,11 +1543,15 @@ window.deleteCurrentRecord = async function() {
     const rawPrice = document.getElementById('ticketPrice').value.replace(/,/g, '').trim();
     const parsedPrice = rawPrice !== '' ? Number(rawPrice) : 0;
 
+    const cinemaChain = document.getElementById('cinemaChain').value;
+    const cinemaBranch = document.getElementById('cinemaBranch').value.trim();
+    const cinema = cinemaBranch ? `${cinemaChain} ${cinemaBranch}` : cinemaChain;
+
     const recordData = {
       uid: currentUser.uid,
       date: date,
       title: title,
-      cinema: document.getElementById('cinema').value,
+      cinema: cinema,
       ticketPrice: parsedPrice,
       promotion: document.getElementById('promotion').value,
       startTime: startTime,
