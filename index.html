@@ -481,6 +481,18 @@
   let unsubscribeSnapshot = null;
   let isSaving = false;
 
+  // 로그인 기록이 있으면, 첫 화면을 그리기 전에 실제 데이터가 도착할 짧은 기회를 줌
+  // (달력과 영화 기록이 따로따로 뜨지 않고 한 번에 같이 뜨게 하기 위함)
+  let firstDataResolved = false;
+  let resolveFirstData;
+  const firstDataPromise = new Promise((resolve) => { resolveFirstData = resolve; });
+  function resolveFirstDataOnce() {
+    if (!firstDataResolved) {
+      firstDataResolved = true;
+      resolveFirstData();
+    }
+  }
+
   (function restoreCachedUser() {
     const cachedUser = localStorage.getItem('filmNote_user');
     if (cachedUser) {
@@ -545,6 +557,7 @@
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         movieLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderCalendar();
+        resolveFirstDataOnce();
       }, (err) => console.error("Firestore 수신 오류:", err));
     } else {
       localStorage.removeItem('filmNote_user');
@@ -552,6 +565,7 @@
       userProfile.style.display = 'none';
       movieLogs = [];
       renderCalendar();
+      resolveFirstDataOnce();
     }
   });
 
@@ -1329,7 +1343,17 @@ window.deleteCurrentRecord = async function() {
     }
   });
 
-  renderCalendar();
+  // 이전에 로그인했던 기록이 있으면, 실제 데이터가 도착할 때까지 최대 400ms만 잠깐 기다렸다가
+  // 달력과 영화 기록을 한 번에 그림 (그 안에 안 오면 그냥 지금처럼 진행)
+  const hadCachedUser = !!localStorage.getItem('filmNote_user');
+  if (hadCachedUser) {
+    Promise.race([
+      firstDataPromise,
+      new Promise((resolve) => setTimeout(resolve, 400))
+    ]).then(() => renderCalendar());
+  } else {
+    renderCalendar();
+  }
 
 // 모바일 좌우 스와이프 달력 넘김 기능 추가
 const calendarBody = document.getElementById('calendar-grid');
