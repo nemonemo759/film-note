@@ -966,7 +966,14 @@
       unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
         movieLogs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         usingCachedLogs = false;
-        renderCalendar();
+        // 데이터는 항상 즉시 반영하되, 화면 그리기는 드래그 중이면 잠깐 미룸
+        // (드래그 도중 다른 곳에서 데이터가 바뀌어 하필 그 순간 다시 그려지면
+        //  깜빡임의 원인이 되므로, dndCleanup에서 드래그가 끝난 뒤 한 번만 그림)
+        if (dndUIReady && (dnd.active || dnd.suspendRerender)) {
+          dnd.pendingRerender = true;
+        } else {
+          renderCalendar();
+        }
         // 다음 접속 때 즉시 그릴 수 있도록 저장 (렌더를 막지 않게 유휴 시간에)
         const persist = () => saveLogsCache(user.uid, movieLogs);
         if (window.requestIdleCallback) requestIdleCallback(persist, { timeout: 2000 });
@@ -2066,10 +2073,18 @@ window.deleteCurrentRecord = async function() {
     const month = currentDate.getMonth();
 
     // 공휴일 API 응답을 기다리지 않고 캐시(또는 빈 값)로 즉시 렌더링
-    // 최신 공휴일 정보가 도착하면 같은 달을 보고 있을 때만 조용히 다시 그림
+    // 최신 공휴일 정보가 도착하면 같은 달을 보고 있을 때만 조용히 다시 그림.
+    // 단, 이 응답은 사용자가 지금 뭘 하고 있는지와 무관하게 아무 때나 도착하므로,
+    // 하필 드래그하는 도중에 도착하면 그 순간 화면이 다시 그려지며 깜빡이는
+    // 원인이 됐음 — 드래그 중이면 지금 당장 그리지 않고 표시만 해뒀다가,
+    // 드래그가 끝나는 시점(dndCleanup)에 한 번만 반영되게 미룸.
     const holidayList = getHolidaysWithCache(year, month, (freshList) => {
       if (currentDate.getFullYear() === year && currentDate.getMonth() === month) {
-        renderCalendar();
+        if (dndUIReady && (dnd.active || dnd.suspendRerender)) {
+          dnd.pendingRerender = true;
+        } else {
+          renderCalendar();
+        }
       }
     });
 
@@ -2273,7 +2288,13 @@ if (calendarBody) {
     suppressClick: false, // 드래그 직후 날짜 클릭(모달 열림) 방지
     edgeTimer: null,
     edgeBtn: null,
-    sourceNode: null      // 드래그 시작한 실제 day-cell DOM 노드 (통째로 보존/복원 대상)
+    sourceNode: null,      // 드래그 시작한 실제 day-cell DOM 노드 (통째로 보존/복원 대상)
+    pendingRerender: false, // 드래그(또는 그 뒤 확인 팝업) 중에 미뤄둔 재렌더링이 있는지
+    // 손가락/마우스를 뗀 순간(active=false) 이후에도 "옮길까요?" 확인 팝업이
+    // 열려있는 동안에는 계속 재렌더링을 미뤄야 함. 이게 없으면 팝업이 떠있는 사이에
+    // (예: 방금 추가한 기록의 포스터 정보가 뒤늦게 도착해 저장되는 등) 데이터가 한 번이라도
+    // 바뀌면 그 순간 달력 전체가 다시 그려지면서 팝업 뒤에서 화면이 깜빡이는 원인이 됐음.
+    suspendRerender: false
   };
 
   const DND_MOUSE_THRESHOLD = 8;   // 마우스가 이만큼 움직이면 드래그로 인정
@@ -2314,6 +2335,7 @@ if (calendarBody) {
     dnd.active = true;
     dnd.pending = false;
     dnd.fromDate = fromDate;
+    dnd.suspendRerender = true;
     document.body.classList.add('dnd-active');
 
     const sorted = sortLogsByTime(logs);
@@ -2390,7 +2412,7 @@ if (calendarBody) {
     }
   }
 
-  function dndCleanup() {
+  function dndCleanup(keepSuspended) {
     clearTimeout(dnd.longPressTimer);
     clearTimeout(dnd.edgeTimer);
     if (dnd.ghost) dnd.ghost.remove();
@@ -2411,10 +2433,7 @@ if (calendarBody) {
     });
 
     document.body.classList.remove('dnd-active');
-    // 드래그 중 달을 넘겨서(엣지 자동 넘김) 시작 칸이 숨김 보관함에 실제로
-    // 대피된 적이 있을 때만 복원용 재렌더링이 필요함. 평범한 같은 달 드래그는
-    // 애초에 대피가 일어나지 않으므로, 여기서 무조건 다시 그리면 곧바로 이어질
-    // (실제 이동 결과가 반영되는) 재렌더링과 겹쳐 화면이 깜빡이는 원인이 됐음.
+
     const neededRestore = dndHolder.children.length > 0;
     dndHolder.innerHTML = ''; // 보관함에 대피시켜뒀을 수도 있는 옛 노드 정리
     dnd.active = false;
@@ -2425,7 +2444,24 @@ if (calendarBody) {
     dnd.fromDate = null;
     dnd.sourceNode = null;
 
-    if (neededRestore) renderCalendar();
+    // keepSuspended가 true면(= 이제 "옮길까요?" 확인 팝업으로 넘어가는 경우)
+    // 재렌더링 억제를 여기서 풀지 않고 그대로 켜둔 채로 둠. 그 사이 들어오는
+    // 데이터 변경은 계속 pendingRerender로만 쌓이고, 팝업이 완전히 끝난 뒤
+    // (handleDayDrop의 finally)에 딱 한 번만 반영됨 — 팝업 뒤에서 달력이
+    // 다시 그려지며 깜빡이던 문제의 원인이 바로 이 타이밍이었음.
+    if (keepSuspended) {
+      // 다만 드래그 중 달을 넘겨서(엣지 자동 넘김) 대피시켜뒀던 칸이 있다면,
+      // 그건 확인 팝업이 뜨기 전인 지금 바로 복원해야 함 (안 그러면 달력이
+      // 깨진 채로 팝업이 열림). 이 렌더링은 팝업보다 먼저 끝나므로 겹쳐 보일 일이 없음.
+      if (neededRestore) renderCalendar();
+      return;
+    }
+
+    const hadPendingRerender = dnd.pendingRerender;
+    dnd.pendingRerender = false;
+    dnd.suspendRerender = false;
+
+    if (neededRestore || hadPendingRerender) renderCalendar();
   }
 
   function dndFinish(x, y) {
@@ -2435,8 +2471,9 @@ if (calendarBody) {
     const el = document.elementFromPoint(x, y);
     const cell = el && el.closest ? el.closest('.day-cell') : null;
     const toDate = cell ? cell.dataset.date : null;
+    const willMove = !!(fromDate && toDate && toDate !== fromDate);
 
-    dndCleanup();
+    dndCleanup(willMove);
 
     // 드래그가 끝난 직후의 클릭(=날짜 모달 열림)은 한 번 막아줌
     dnd.suppressClick = true;
@@ -2636,35 +2673,47 @@ if (calendarBody) {
   }
 
   window.handleDayDrop = async function(fromDate, toDate) {
-    if (!(await requireLogin())) return;
-    const logs = dndLogsOf(fromDate);
-    if (logs.length === 0) return;
+    try {
+      if (!(await requireLogin())) return;
+      const logs = dndLogsOf(fromDate);
+      if (logs.length === 0) return;
 
-    let targetIds = null;
+      let targetIds = null;
 
-    if (logs.length === 1) {
-      const result = await Swal.fire({
-        title: 'Film Note',
-        html: `<b>${dndEscape(logs[0].title)}</b> 기록을<br>${fromDate} → <b>${toDate}</b> 로 옮길까요?`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: '옮기기',
-        cancelButtonText: '취소',
-        confirmButtonColor: '#f2ebd9',
-        cancelButtonColor: '#e9ecef',
-        didOpen: () => {
-          const cancelBtn = Swal.getCancelButton();
-          if (cancelBtn) cancelBtn.style.color = '#333333';
-        }
-      });
-      if (!result.isConfirmed) return;
-      targetIds = [logs[0].id];
-    } else {
-      targetIds = await pickRecordsToMove(logs, fromDate, toDate);
+      if (logs.length === 1) {
+        const result = await Swal.fire({
+          title: 'Film Note',
+          html: `<b>${dndEscape(logs[0].title)}</b> 기록을<br>${fromDate} → <b>${toDate}</b> 로 옮길까요?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: '옮기기',
+          cancelButtonText: '취소',
+          confirmButtonColor: '#f2ebd9',
+          cancelButtonColor: '#e9ecef',
+          didOpen: () => {
+            const cancelBtn = Swal.getCancelButton();
+            if (cancelBtn) cancelBtn.style.color = '#333333';
+          }
+        });
+        if (!result.isConfirmed) return;
+        targetIds = [logs[0].id];
+      } else {
+        targetIds = await pickRecordsToMove(logs, fromDate, toDate);
+      }
+
+      if (!targetIds || targetIds.length === 0) return;
+      await moveLogsToDate(targetIds, toDate);
+    } finally {
+      // 드래그로 시작된 이동 흐름(확인 팝업 포함)이 여기서 완전히 끝남.
+      // 그동안 억제해뒀던 재렌더링을 이제 풀어주고, 그 사이에 다른 이유로
+      // 데이터가 바뀌어 미뤄둔 게 있었다면 지금 딱 한 번만 반영함.
+      // (취소했을 때도 반드시 여기서 풀어줘야 다음 번 갱신이 계속 미뤄지지 않음)
+      dnd.suspendRerender = false;
+      if (dnd.pendingRerender) {
+        dnd.pendingRerender = false;
+        renderCalendar();
+      }
     }
-
-    if (!targetIds || targetIds.length === 0) return;
-    await moveLogsToDate(targetIds, toDate);
   };
 
   async function moveLogsToDate(ids, toDate) {
@@ -2702,7 +2751,7 @@ if (calendarBody) {
       renderCalendar();
     }
 
-    Swal.fire({
+    await Swal.fire({
       title: 'Film Note',
       html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
       icon: 'success',
