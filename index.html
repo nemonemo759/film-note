@@ -1877,6 +1877,65 @@ if (calendarBody) {
       observer.observe(modal, { attributes: true, attributeFilter: ['style', 'class'] });
     }
   });
+
+  // ===================== 모바일 키보드 대응 (모달이 키보드에 안 가리게 중앙 정렬) =====================
+  // 모바일에서 입력창에 포커스가 가면 키보드가 올라오면서 실제 "보이는 화면 영역"이 줄어드는데,
+  // 모달은 항상 전체 화면(100%) 기준으로 가운데 정렬되다보니 키보드에 팝업이 가려지는 문제가 있었음.
+  // visualViewport API로 키보드를 뺀 실제 보이는 영역을 감지해서, 그 영역 안에서
+  // 모달이 다시 가운데 오도록 위치/크기를 맞춰줌 (iOS/Android 브라우저 공통 지원. 미지원 브라우저는 그냥 기존 방식대로 동작).
+  function syncModalToVisibleViewport() {
+    if (!window.visualViewport) return;
+    const vv = window.visualViewport;
+    document.querySelectorAll('.modal-overlay, .poster-modal-overlay').forEach(overlay => {
+      if (window.getComputedStyle(overlay).display === 'none') return;
+      overlay.style.left = vv.offsetLeft + 'px';
+      overlay.style.top = vv.offsetTop + 'px';
+      overlay.style.width = vv.width + 'px';
+      overlay.style.height = vv.height + 'px';
+
+      // 모달 내용(.modal-card)이 키보드 때문에 줄어든 화면보다 커서 잘리는 일이 없도록
+      // 최대 높이도 실제 보이는 영역 기준으로 같이 맞춰줌
+      const card = overlay.querySelector('.modal-card');
+      if (card) {
+        card.style.maxHeight = Math.max(vv.height - 32, 120) + 'px';
+      }
+    });
+  }
+
+  function resetModalViewportStyle(overlay) {
+    overlay.style.left = '';
+    overlay.style.top = '';
+    overlay.style.width = '';
+    overlay.style.height = '';
+    const card = overlay.querySelector('.modal-card');
+    if (card) card.style.maxHeight = '';
+  }
+
+  if (window.visualViewport) {
+    // 키보드가 올라오거나 내려갈 때(=보이는 영역 크기가 바뀔 때)마다 다시 계산
+    window.visualViewport.addEventListener('resize', syncModalToVisibleViewport);
+    window.visualViewport.addEventListener('scroll', syncModalToVisibleViewport);
+  }
+
+  // 모달이 열리고 닫힐 때도 바로 반영 (닫힐 땐 스타일을 초기화해서 다음에 열릴 때 새로 계산되게 함)
+  const keyboardAwareObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      const target = mutation.target;
+      const isModal = target.classList && (target.classList.contains('modal-overlay') || target.classList.contains('poster-modal-overlay'));
+      if (!isModal) return;
+
+      const isVisible = window.getComputedStyle(target).display !== 'none';
+      if (isVisible) {
+        syncModalToVisibleViewport();
+      } else {
+        resetModalViewportStyle(target);
+      }
+    });
+  });
+
+  document.querySelectorAll('.modal-overlay, .poster-modal-overlay').forEach(overlay => {
+    keyboardAwareObserver.observe(overlay, { attributes: true, attributeFilter: ['style', 'class'] });
+  });
 </script>
 </body>
 </html>
