@@ -760,7 +760,8 @@
   };
 
   window.handleSearchInput = function(val) {
-    const query = val.trim().toLowerCase();
+    // 띄어쓰기 유무 때문에 검색이 안 되는 문제 방지 (예: "가능한사랑"으로 검색해도 "가능한 사랑" 찾아지게)
+    const query = val.trim().toLowerCase().replace(/\s+/g, '');
     const container = document.getElementById('searchResultsContainer');
 
     if (!query) {
@@ -769,7 +770,7 @@
     }
 
     const matched = movieLogs
-      .filter(l => (l.title || '').toLowerCase().includes(query))
+      .filter(l => (l.title || '').toLowerCase().replace(/\s+/g, '').includes(query))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     if (matched.length === 0) {
@@ -1317,19 +1318,46 @@ window.deleteCurrentRecord = async function() {
 
   async function fetchKoficTMDBAutoComplete(query) {
     try {
-      const koficUrl = `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(query)}&itemPerPage=20`;
-      const res = await fetch(koficUrl);
-      const data = await res.json();
-      const list = data.movieListResult?.movieList || [];
-
-      // 입력값과 100% 일치하는 제목("인턴")을 최우선으로 정렬
       const cleanQuery = query.trim();
-      list.sort((a, b) => {
-        const titleA = (a.movieNm || '').trim();
-        const titleB = (b.movieNm || '').trim();
+      const normalizedQuery = cleanQuery.replace(/\s+/g, '');
 
-        if (titleA === cleanQuery && titleB !== cleanQuery) return -1;
-        if (titleA !== cleanQuery && titleB === cleanQuery) return 1;
+      // KOFIC 검색 API가 띄어쓰기 유무에 따라 다른 결과를 줄 때가 있어서,
+      // 입력한 그대로 + 띄어쓰기 뺀 버전 둘 다 검색해서 합쳐줌
+      // (예: "가능한사랑"으로 검색해도 "가능한 사랑"이 나오도록)
+      const buildUrl = (q) => `https://kobis.or.kr/kobisopenapi/webservice/rest/movie/searchMovieList.json?key=${KOFIC_KEY}&movieNm=${encodeURIComponent(q)}&itemPerPage=20`;
+
+      const fetchList = async (q) => {
+        try {
+          const res = await fetch(buildUrl(q));
+          const data = await res.json();
+          return data.movieListResult?.movieList || [];
+        } catch (e) {
+          return [];
+        }
+      };
+
+      const needsFallback = normalizedQuery !== cleanQuery;
+      const [listA, listB] = await Promise.all([
+        fetchList(cleanQuery),
+        needsFallback ? fetchList(normalizedQuery) : Promise.resolve([])
+      ]);
+
+      // movieCd 기준으로 중복 제거하며 합치기
+      const seen = new Set();
+      const list = [...listA, ...listB].filter(movie => {
+        const code = movie.movieCd;
+        if (!code || seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      });
+
+      // 입력값과 (띄어쓰기 무시하고) 일치하는 제목을 최우선으로 정렬
+      list.sort((a, b) => {
+        const titleA = (a.movieNm || '').trim().replace(/\s+/g, '');
+        const titleB = (b.movieNm || '').trim().replace(/\s+/g, '');
+
+        if (titleA === normalizedQuery && titleB !== normalizedQuery) return -1;
+        if (titleA !== normalizedQuery && titleB === normalizedQuery) return 1;
         return 0;
       });
 
