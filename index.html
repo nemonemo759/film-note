@@ -2689,7 +2689,10 @@ if (calendarBody) {
         const result = await Swal.fire({
           title: 'Film Note',
           html: `<b>${dndEscape(logs[0].title)}</b> 기록을<br>${fromDate} → <b>${toDate}</b> 로 옮길까요?`,
-          icon: 'question',
+          // icon: 'question' 를 뺐음 — SweetAlert2의 아이콘은 그냥 그림이 아니라
+          // 0.5~0.75초짜리 CSS 애니메이션(물음표가 튕기는 효과)이 있는데, 하필 그
+          // 재생 시간 중에 데이터 갱신(onSnapshot)이 겹치면 프레임이 밀리면서
+          // 깜빡이는 것처럼 보였음. 아이콘이 없는 다중 기록 팝업은 이 문제가 없었음.
           showCancelButton: true,
           confirmButtonText: '옮기기',
           cancelButtonText: '취소',
@@ -2759,7 +2762,8 @@ if (calendarBody) {
     await Swal.fire({
       title: 'Film Note',
       html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
-      icon: 'success',
+      // icon: 'success' 를 뺐음 — 체크마크가 그려지는 애니메이션(약 0.5~0.75초)이
+      // 하필 데이터 갱신(onSnapshot) 타이밍과 겹칠 때 깜빡임으로 보였던 원인.
       confirmButtonText: '확인',
       confirmButtonColor: '#f2ebd9'
     });
