@@ -752,6 +752,7 @@
 
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
+  const KMDB_KEY = 'APIGH5EGEZH1P3KX0TOG'; // TMDB에 없는 재개봉/국내 개봉작 포스터 보완용
   const DEFAULT_POSTER = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22250%22 height=%22350%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23dcd3be%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 fill=%22%23ffffff%22 font-family=%22sans-serif%22 font-size=%2220%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E";
   
   // TMDB 포스터는 원본(w780)을 그대로 쓰면 달력 썸네일 한 칸에도 수백 KB가 내려옴.
@@ -1806,6 +1807,38 @@ window.deleteCurrentRecord = async function() {
 
             if (matchedResult && matchedResult.poster_path) {
               posterUrl = `https://image.tmdb.org/t/p/w780${matchedResult.poster_path}`;
+            }
+          }
+
+          // 4차: TMDB에 끝내 없으면 KMDB(한국영상자료원)에서 마지막으로 시도.
+          // "어벤져스: 엔드게임"이 "어벤져스: 엔드게임 앙코르" 같은 재개봉 제목으로만
+          // KOFIC에 올라와서 TMDB 검색이 걸리지 않는 경우를 보완하기 위함.
+          // TMDB가 이미 찾은 경우엔 이 블록 자체가 실행되지 않으므로 평소 속도엔 영향 없음.
+          if (posterUrl === DEFAULT_POSTER) {
+            try {
+              const kmdbQuery = cleanedSearchTitle || movieNm;
+              const kmdbUrl = `https://api.koreafilm.or.kr/openapi-data2/wisenut/search_api/search_json2.jsp?collection=kmdb_new2&detail=Y&query=${encodeURIComponent(kmdbQuery)}&ServiceKey=${KMDB_KEY}`;
+              const kRes = await fetch(kmdbUrl);
+              const kData = await kRes.json();
+              const kResults = kData?.Data?.[0]?.Result || [];
+
+              // 1순위: 포스터가 있고 제작연도가 일치하는 결과, 2순위: 포스터만 있으면 첫 결과
+              let kMatch = null;
+              if (targetYear) {
+                kMatch = kResults.find(r => r.posters && r.prodYear === targetYear);
+              }
+              if (!kMatch) {
+                kMatch = kResults.find(r => r.posters);
+              }
+
+              if (kMatch && kMatch.posters) {
+                const firstPoster = kMatch.posters.split('|')[0].trim();
+                // KMDB 이미지 서버가 http만 문서화돼 있어, https 페이지에서 막히지
+                // 않도록 https로 올려서 사용 (실패하면 기존 onerror가 기본 이미지로 대체)
+                if (firstPoster) posterUrl = firstPoster.replace(/^http:\/\//, 'https://');
+              }
+            } catch (e) {
+              console.error("KMDB 포스터 조회 실패:", e);
             }
           }
         } catch (e) {
