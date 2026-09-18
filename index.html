@@ -2248,30 +2248,6 @@ window.deleteCurrentRecord = async function() {
   // 부드럽게 페이드인되도록 처리함 (renderCalendar 내부의 opacity 트랜지션 참고)
   renderCalendar();
 
-  // 지금까지 손본 건 전부 "JS가 언제 다시 그리느냐" 쪽이었는데, 그래도 딱 첫 드래그에서만
-  // 깜빡인다면 원인이 JS 타이밍이 아니라 브라우저 자체의 1회성 비용일 가능성이 큼.
-  // 드래그 중 쓰는 CSS 효과들(고스트의 transform, 원본 칸의 filter:grayscale, 대상 칸의
-  // scale+box-shadow)은 전부 GPU 합성 레이어가 필요한 속성들인데, 브라우저는 그 페이지에서
-  // 그런 속성이 "처음" 실제로 쓰이는 순간에야 합성 레이어/텍스처를 새로 할당함 — 이 최초
-  // 할당 비용이 한 프레임 정도의 눈에 띄는 끊김(깜빡임)으로 보일 수 있음.
-  // 그래서 페이지가 뜨자마자, 실제 드래그와 똑같은 CSS 효과를 가진 보이지 않는 엘리먼트를
-  // 하나 만들어서 그 비용을 미리 치러둠 (사용자에게는 전혀 안 보임).
-  (function warmUpDragCompositing() {
-    const warm = document.createElement('div');
-    warm.style.cssText = `
-      position: fixed; left: -9999px; top: -9999px; z-index: -1;
-      width: 64px; aspect-ratio: 1 / 1.35; border-radius: 10px; border: 2px solid #fff;
-      background-color: #e8e2d5; box-shadow: 0 10px 22px rgba(0,0,0,0.32);
-      opacity: 0.93; filter: grayscale(0.5);
-      transform: translate(-50%, -50%) rotate(-4deg) scale(1.06);
-    `;
-    document.body.appendChild(warm);
-    void warm.offsetHeight; // 강제로 한 번 읽어서 레이아웃/페인트가 실제로 계산되게 함
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { warm.remove(); });
-    });
-  })();
-
   // SweetAlert2는 이 페이지에서 팝업을 "처음" 띄우는 그 순간에, 스타일시트 주입이나
   // 내부 DOM 컨테이너 준비 같은 1회성 초기화 비용을 그때서야 치름. 사이트에 막
   // 접속해서 바로 기록을 옮기면 하필 그 첫 팝업(옮길까요?)이 이 비용을 떠안게 되어,
