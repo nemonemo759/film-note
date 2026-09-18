@@ -753,6 +753,19 @@
   const KOFIC_KEY = '1dfa8b3f5fa1dcb5bef4020e7099ba2d';
   const TMDB_KEY = '346b51ed7a86a8c9fd0cbbe9e2b77beb';
   const KMDB_KEY = 'APIGH5EGEZH1P3KX0TOG'; // TMDB에 없는 재개봉/국내 개봉작 포스터 보완용
+
+  // 이미지가 실제로 뜨는지(존재하는지) 확인만 하고 boolean으로 알려줌.
+  // KMDB 고화질 URL을 "추정"해서 시도해볼 때, 확정 짓기 전에 미리 검증하는 용도.
+  // 서버가 응답 없이 멈춰버리는 경우에 대비해 3초 넘으면 실패로 간주하고 포기함.
+  function tryLoadImage(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const timer = setTimeout(() => resolve(false), 3000);
+      img.onload = () => { clearTimeout(timer); resolve(true); };
+      img.onerror = () => { clearTimeout(timer); resolve(false); };
+      img.src = url;
+    });
+  }
   const DEFAULT_POSTER = "data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22250%22 height=%22350%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23dcd3be%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 fill=%22%23ffffff%22 font-family=%22sans-serif%22 font-size=%2220%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E";
   
   // TMDB 포스터는 원본(w780)을 그대로 쓰면 달력 썸네일 한 칸에도 수백 KB가 내려옴.
@@ -1814,9 +1827,15 @@ window.deleteCurrentRecord = async function() {
           // "어벤져스: 엔드게임"이 "어벤져스: 엔드게임 앙코르" 같은 재개봉 제목으로만
           // KOFIC에 올라와서 TMDB 검색이 걸리지 않는 경우를 보완하기 위함.
           // TMDB가 이미 찾은 경우엔 이 블록 자체가 실행되지 않으므로 평소 속도엔 영향 없음.
+          //
+          // 주의: 여기서는 cleanedSearchTitle이 아니라 movieNm(KOFIC 원본 제목)을 그대로
+          // 씀. "4K 리마스터링", "재개봉" 같은 수식어는 TMDB(국제 DB) 검색을 방해해서
+          // 떼어냈던 거지만, KMDB는 KOFIC과 같은 국내 영화 생태계의 공식 아카이브라
+          // 오히려 그 수식어가 붙은 원래 등록 제목 그대로 검색해야 그 재개봉판 항목을
+          // 더 정확히 찾아낼 가능성이 높음.
           if (posterUrl === DEFAULT_POSTER) {
             try {
-              const kmdbQuery = cleanedSearchTitle || movieNm;
+              const kmdbQuery = movieNm;
               const kmdbUrl = `https://api.koreafilm.or.kr/openapi-data2/wisenut/search_api/search_json2.jsp?collection=kmdb_new2&detail=Y&query=${encodeURIComponent(kmdbQuery)}&ServiceKey=${KMDB_KEY}`;
               const kRes = await fetch(kmdbUrl);
               const kData = await kRes.json();
@@ -1833,9 +1852,25 @@ window.deleteCurrentRecord = async function() {
 
               if (kMatch && kMatch.posters) {
                 const firstPoster = kMatch.posters.split('|')[0].trim();
-                // KMDB 이미지 서버가 http만 문서화돼 있어, https 페이지에서 막히지
-                // 않도록 https로 올려서 사용 (실패하면 기존 onerror가 기본 이미지로 대체)
-                if (firstPoster) posterUrl = firstPoster.replace(/^http:\/\//, 'https://');
+                if (firstPoster) {
+                  const thumbUrl = firstPoster.replace(/^http:\/\//, 'https://');
+
+                  // KMDB가 응답으로 주는 posters URL은 썸네일(tn_*)뿐인데, 경로/파일명
+                  // 규칙상 "/thm/NN/.../tn_이름.jpg" → "/poster/.../이름_01.jpg" 로 바꾸면
+                  // 고화질본일 가능성이 있음(확실히 검증은 못 했고, 파일마다 규칙이
+                  // 다를 수도 있음). 그래서 이 URL이 실제로 뜨는지 먼저 확인해보고,
+                  // 성공하면 고화질을, 실패하면 원래 썸네일을 그대로 씀 — 최악의
+                  // 경우에도 지금 수준(썸네일)보다 나빠지진 않음.
+                  const highResUrl = thumbUrl
+                    .replace(/\/thm\/\d+\//, '/poster/')
+                    .replace(/tn_([^\/]+)\.(\w+)$/i, '$1_01.$2');
+
+                  if (highResUrl !== thumbUrl && await tryLoadImage(highResUrl)) {
+                    posterUrl = highResUrl;
+                  } else {
+                    posterUrl = thumbUrl;
+                  }
+                }
               }
             } catch (e) {
               console.error("KMDB 포스터 조회 실패:", e);
