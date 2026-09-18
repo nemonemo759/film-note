@@ -2248,6 +2248,26 @@ window.deleteCurrentRecord = async function() {
   // 부드럽게 페이드인되도록 처리함 (renderCalendar 내부의 opacity 트랜지션 참고)
   renderCalendar();
 
+  // SweetAlert2는 이 페이지에서 팝업을 "처음" 띄우는 그 순간에, 스타일시트 주입이나
+  // 내부 DOM 컨테이너 준비 같은 1회성 초기화 비용을 그때서야 치름. 사이트에 막
+  // 접속해서 바로 기록을 옮기면 하필 그 첫 팝업(옮길까요?)이 이 비용을 떠안게 되어,
+  // 다른 데이터 변경과 안 겹쳐도 그 자체로 버벅임/깜빡임처럼 보였던 것으로 보임.
+  // 그래서 페이지가 뜨고 잠깐 뒤(중요한 첫 렌더링을 막지 않는 시점)에, 화면에
+  // 전혀 보이지 않는 팝업을 한 번 열었다 바로 닫아서 이 초기화 비용을 미리 치러둠.
+  setTimeout(() => {
+    try {
+      Swal.fire({
+        html: '',
+        showConfirmButton: false,
+        backdrop: false,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        willOpen: (popup) => { popup.style.visibility = 'hidden'; },
+        didOpen: () => { Swal.close(); }
+      });
+    } catch (e) { /* SweetAlert2 예열 실패는 무시해도 되는 최적화일 뿐 */ }
+  }, 300);
+
 // 모바일 좌우 스와이프 달력 넘김 기능 추가
 const calendarBody = document.getElementById('calendar-grid');
 if (calendarBody) {
