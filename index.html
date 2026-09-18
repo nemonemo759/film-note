@@ -2262,7 +2262,15 @@ window.deleteCurrentRecord = async function() {
         backdrop: false,
         allowOutsideClick: false,
         allowEscapeKey: false,
-        willOpen: (popup) => { popup.style.visibility = 'hidden'; },
+        showClass: { popup: '' }, // 등장 애니메이션 생략 → 컨테이너가 화면에 남아있는 시간을 최소화
+        hideClass: { popup: '' }, // 퇴장 애니메이션도 생략 → didOpen에서 닫자마자 즉시 사라짐
+        willOpen: (popup) => {
+          popup.style.visibility = 'hidden';
+          // 혹시 이 짧은 순간에 사용자가 다른 곳을 클릭/터치하더라도 그대로 통과되도록,
+          // 화면 전체를 덮는 컨테이너 레이어 자체를 클릭 통과 상태로 만들어둠.
+          const container = popup.closest('.swal2-container');
+          if (container) container.style.pointerEvents = 'none';
+        },
         didOpen: () => { Swal.close(); }
       });
     } catch (e) { /* SweetAlert2 예열 실패는 무시해도 되는 최적화일 뿐 */ }
