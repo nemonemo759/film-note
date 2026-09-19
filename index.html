@@ -375,14 +375,14 @@
     margin: 10px auto -10px !important;
   }
 
-  /* 배경이 어두워지는 효과 자체(swal2-backdrop-show가 적용하는 background-color)는
-     그대로 유지하면서, 그 색이 바뀔 때 걸리는 트랜지션(페이드)만 없애서 즉시
-     어두워지게 함. showClass/hideClass에서 이 클래스를 swal2-backdrop-show/hide와
-     같이 붙여서 씀 — "어두워지는 효과 자체를 없애는" 실수 없이, 다른 애니메이션과
-     타이밍이 어긋나 화면이 반짝여 보이는 문제만 없앰. */
-  .swal2-instant-backdrop {
-    transition: none !important;
-  }
+  /* 팝업(swal2-show/hide 애니메이션)과 배경(swal2-container의 background-color
+     트랜지션)이 원래 서로 다른 길이로 재생돼서, 둘이 끝나는 시점이 어긋나며
+     화면이 반짝이는 것처럼 보였음. 클래스를 바꿔치기하면 SweetAlert2 내부의
+     "애니메이션 끝났는지" 감지 로직이 깨질 수 있어서, 클래스는 그대로 두고
+     길이(duration)만 똑같이 맞춤 — 팝업 등장 0.25s / 배경 0.25s로 통일. */
+  .swal2-container { transition-duration: 0.25s !important; }
+  .swal2-show { animation-duration: 0.25s !important; }
+  .swal2-hide { animation-duration: 0.2s !important; }
 
   /* 2. 확인 버튼 글자색 (유지) */
   .swal2-confirm {
@@ -2760,14 +2760,12 @@ if (calendarBody) {
       confirmButtonColor: '#f2ebd9',
       cancelButtonColor: '#e9ecef',
       customClass: { popup: 'move-pick-popup' },
-      // 팝업 튀어나오는 애니메이션은 생략(즉시 나타남)하되, 배경이 어두워지는
-      // 효과 자체는 유지하고 그 트랜지션(페이드)만 없애 즉시 어두워지게 함.
-      // 이 애니메이션들이 서로 다른 길이로 재생되며 타이밍이 어긋나는 게
-      // 화면이 반짝이는 것처럼 보이는 문제의 핵심 원인이었음.
-      showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
-      hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
+      // 클래스는 기본값 그대로 두고(SweetAlert2 내부 감지 로직이 깨지지 않게),
+      // 위 CSS에서 팝업/배경 애니메이션 길이만 0.25s로 통일함.
       didOpen: () => {
-        flushPendingCellTransitions();
+        // 칸의 transition 복구는 애니메이션이 다 끝난 뒤로 미룸 (안 그러면 아직
+        // 배경이 다 어두워지기 전에 칸이 원래 모습으로 돌아가며 반짝여 보임)
+        setTimeout(flushPendingCellTransitions, 260);
         const cancelBtn = Swal.getCancelButton();
         if (cancelBtn) cancelBtn.style.color = '#333333';
 
@@ -2838,12 +2836,9 @@ if (calendarBody) {
           cancelButtonText: '취소',
           confirmButtonColor: '#f2ebd9',
           cancelButtonColor: '#e9ecef',
-          // 팝업 등장 애니메이션은 생략하되, 배경이 어두워지는 효과는 유지하고
-          // 트랜지션만 없애 즉시 어두워지게 함 (이유는 위 다중 선택 팝업 주석 참고)
-          showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
-          hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
+          // 클래스는 기본값 그대로 두고, 위 CSS에서 애니메이션 길이만 통일함.
           didOpen: () => {
-            flushPendingCellTransitions();
+            setTimeout(flushPendingCellTransitions, 260);
             const cancelBtn = Swal.getCancelButton();
             if (cancelBtn) cancelBtn.style.color = '#333333';
           }
@@ -2912,8 +2907,6 @@ if (calendarBody) {
       html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
       // icon: 'success' 를 뺐음 — 체크마크가 그려지는 애니메이션(약 0.5~0.75초)이
       // 하필 데이터 갱신(onSnapshot) 타이밍과 겹칠 때 깜빡임으로 보였던 원인.
-      showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
-      hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
       confirmButtonText: '확인',
       confirmButtonColor: '#f2ebd9'
     });
