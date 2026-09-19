@@ -2751,6 +2751,12 @@ if (calendarBody) {
       confirmButtonColor: '#f2ebd9',
       cancelButtonColor: '#e9ecef',
       customClass: { popup: 'move-pick-popup' },
+      // SweetAlert2 자체 등장/퇴장 애니메이션(팝업 튀어나오는 효과 + 배경 어두워지는
+      // background-color 트랜지션)을 꺼서 즉시 나타나고 사라지게 함. 이 애니메이션들이
+      // 서로 다른 길이(팝업 vs 배경 vs 우리 쪽 칸 되돌리기)로 재생되면서 타이밍이
+      // 어긋나 화면이 반짝이는 것처럼 보이는 문제의 핵심 원인이었음.
+      showClass: { popup: '', backdrop: '' },
+      hideClass: { popup: '', backdrop: '' },
       didOpen: () => {
         flushPendingCellTransitions();
         const cancelBtn = Swal.getCancelButton();
@@ -2823,6 +2829,9 @@ if (calendarBody) {
           cancelButtonText: '취소',
           confirmButtonColor: '#f2ebd9',
           cancelButtonColor: '#e9ecef',
+          // 팝업/배경 애니메이션을 꺼서 즉시 나타나고 사라지게 함 (이유는 위 이유 참고)
+          showClass: { popup: '', backdrop: '' },
+          hideClass: { popup: '', backdrop: '' },
           didOpen: () => {
             flushPendingCellTransitions();
             const cancelBtn = Swal.getCancelButton();
@@ -2893,6 +2902,8 @@ if (calendarBody) {
       html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
       // icon: 'success' 를 뺐음 — 체크마크가 그려지는 애니메이션(약 0.5~0.75초)이
       // 하필 데이터 갱신(onSnapshot) 타이밍과 겹칠 때 깜빡임으로 보였던 원인.
+      showClass: { popup: '', backdrop: '' },
+      hideClass: { popup: '', backdrop: '' },
       confirmButtonText: '확인',
       confirmButtonColor: '#f2ebd9'
     });
