@@ -375,6 +375,15 @@
     margin: 10px auto -10px !important;
   }
 
+  /* 배경이 어두워지는 효과 자체(swal2-backdrop-show가 적용하는 background-color)는
+     그대로 유지하면서, 그 색이 바뀔 때 걸리는 트랜지션(페이드)만 없애서 즉시
+     어두워지게 함. showClass/hideClass에서 이 클래스를 swal2-backdrop-show/hide와
+     같이 붙여서 씀 — "어두워지는 효과 자체를 없애는" 실수 없이, 다른 애니메이션과
+     타이밍이 어긋나 화면이 반짝여 보이는 문제만 없앰. */
+  .swal2-instant-backdrop {
+    transition: none !important;
+  }
+
   /* 2. 확인 버튼 글자색 (유지) */
   .swal2-confirm {
     color: #333 !important;
@@ -2751,12 +2760,12 @@ if (calendarBody) {
       confirmButtonColor: '#f2ebd9',
       cancelButtonColor: '#e9ecef',
       customClass: { popup: 'move-pick-popup' },
-      // SweetAlert2 자체 등장/퇴장 애니메이션(팝업 튀어나오는 효과 + 배경 어두워지는
-      // background-color 트랜지션)을 꺼서 즉시 나타나고 사라지게 함. 이 애니메이션들이
-      // 서로 다른 길이(팝업 vs 배경 vs 우리 쪽 칸 되돌리기)로 재생되면서 타이밍이
-      // 어긋나 화면이 반짝이는 것처럼 보이는 문제의 핵심 원인이었음.
-      showClass: { popup: '', backdrop: '' },
-      hideClass: { popup: '', backdrop: '' },
+      // 팝업 튀어나오는 애니메이션은 생략(즉시 나타남)하되, 배경이 어두워지는
+      // 효과 자체는 유지하고 그 트랜지션(페이드)만 없애 즉시 어두워지게 함.
+      // 이 애니메이션들이 서로 다른 길이로 재생되며 타이밍이 어긋나는 게
+      // 화면이 반짝이는 것처럼 보이는 문제의 핵심 원인이었음.
+      showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
+      hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
       didOpen: () => {
         flushPendingCellTransitions();
         const cancelBtn = Swal.getCancelButton();
@@ -2829,9 +2838,10 @@ if (calendarBody) {
           cancelButtonText: '취소',
           confirmButtonColor: '#f2ebd9',
           cancelButtonColor: '#e9ecef',
-          // 팝업/배경 애니메이션을 꺼서 즉시 나타나고 사라지게 함 (이유는 위 이유 참고)
-          showClass: { popup: '', backdrop: '' },
-          hideClass: { popup: '', backdrop: '' },
+          // 팝업 등장 애니메이션은 생략하되, 배경이 어두워지는 효과는 유지하고
+          // 트랜지션만 없애 즉시 어두워지게 함 (이유는 위 다중 선택 팝업 주석 참고)
+          showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
+          hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
           didOpen: () => {
             flushPendingCellTransitions();
             const cancelBtn = Swal.getCancelButton();
@@ -2902,8 +2912,8 @@ if (calendarBody) {
       html: `기록 ${ids.length}개를<br><b>${toDate}</b> 로 옮겼어요.`,
       // icon: 'success' 를 뺐음 — 체크마크가 그려지는 애니메이션(약 0.5~0.75초)이
       // 하필 데이터 갱신(onSnapshot) 타이밍과 겹칠 때 깜빡임으로 보였던 원인.
-      showClass: { popup: '', backdrop: '' },
-      hideClass: { popup: '', backdrop: '' },
+      showClass: { popup: '', backdrop: 'swal2-backdrop-show swal2-instant-backdrop' },
+      hideClass: { popup: '', backdrop: 'swal2-backdrop-hide swal2-instant-backdrop' },
       confirmButtonText: '확인',
       confirmButtonColor: '#f2ebd9'
     });
